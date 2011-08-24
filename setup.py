@@ -20,9 +20,11 @@ from os.path import abspath, join, dirname
 
 setup(
     name="cql",
-    version="1.0.3",
+    version="1.0.4",
     description="Cassandra Query Language driver",
     long_description=open(abspath(join(dirname(__file__), 'README'))).read(),
+    maintainer='Apache Cassandra development team',
+    maintainer_email='dev@cassandra.apache.org',
     url="http://cassandra.apache.org",
     packages=["cql", "cql.cassandra"],
     scripts=["cqlsh"],

@@ -32,21 +32,7 @@ class SchemaDecoder(object):
 
     def __comparator_for(self, keyspace, column_family):
         cfam = self.__get_column_family_def(keyspace, column_family)
-        if "comparator" in cfam:
-            return cfam["comparator"]
-        return None
-
-    def __validator_for(self, keyspace, column_family, name):
-        cfam = self.__get_column_family_def(keyspace, column_family)
-        if name in cfam["columns"]:
-            return cfam["columns"][name]
-        return cfam["default_validation_class"]
-
-    def __keytype_for(self, keyspace, column_family):
-        cfam = self.__get_column_family_def(keyspace, column_family)
-        if "key_validation_class" in cfam:
-            return cfam["key_validation_class"]
-        return None
+        return cfam.get("comparator", None)
 
     def decode_description(self, keyspace, column_family, row):
         description = []
@@ -60,16 +46,23 @@ class SchemaDecoder(object):
         return description
 
     def decode_row(self, keyspace, column_family, row):
-        comparator = self.__comparator_for(keyspace, column_family)
-        unmarshal = unmarshallers.get(comparator, unmarshal_noop)
+        cfdef = self.__get_column_family_def(keyspace, column_family)
+        key_alias = cfdef['key_alias']
+        validators = cfdef['columns']
+        default_validator = cfdef['default_validation_class']
+        key_validator = cfdef.get("key_validation_class", None)
+
         values = []
         for column in row.columns:
+            name = column.name
             if column.value is None:
                 values.append(None)
                 continue
-            if column.name == self.__get_column_family_def(keyspace, column_family)['key_alias']:
-                validator = self.__keytype_for(keyspace, column_family)
+
+            if name == key_alias:
+                validator = key_validator
             else:
-                validator = self.__validator_for(keyspace, column_family, column.name)
+                validator = validators.get(name, default_validator)
             values.append(unmarshallers.get(validator, unmarshal_noop)(column.value))
+
         return values

@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import defaultdict
 from optparse import OptionParser
 from StringIO import StringIO
 
@@ -24,6 +25,7 @@ import sys
 import readline
 import os
 import re
+import string
 import time
 
 try:
@@ -31,7 +33,7 @@ try:
 except ImportError:
     sys.path.append(os.path.abspath(os.path.dirname(__file__)))
     import cql
-from cql.cursor import _COUNT_DESCRIPTION
+from cql.cursor import _COUNT_DESCRIPTION, _VOID_DESCRIPTION
 
 HISTORY = os.path.join(os.path.expanduser('~'), '.cqlsh')
 CQLTYPES = ("bytes", "ascii", "utf8", "timeuuid", "uuid", "long", "int")
@@ -135,22 +137,79 @@ class Shell(cmd.Cmd):
                 self.cursor.execute(statement)
                 break
             except cql.IntegrityError, err:
-                self.printerr("Attempt #%d: %s" % (i, str(err)), color=RED)
+                self.printerr("Attempt #%d: %s" % (i, str(err)))
                 time.sleep(1*i)
 
-        if self.cursor.description is _COUNT_DESCRIPTION:
-            if self.cursor.result: print self.cursor.result[0]
+        if self.cursor.description is _VOID_DESCRIPTION:
+            return
+        elif self.cursor.description is _COUNT_DESCRIPTION:
+            self.print_count_result()
         else:
-            for x in range(self.cursor.rowcount):
-                row = self.cursor.fetchone()
-                self.printout(repr(row[0]), BLUE, False)
-                for (i, value) in enumerate(row[1:]):
-                    name = self.cursor.description[i+1][0]
-                    self.printout(" | ", newline=False)
-                    self.printout(repr(name), MAGENTA, False)
-                    self.printout(",", newline=False)
-                    self.printout(repr(value), YELLOW, False)
-                self.printout("")
+            self.print_result()
+
+    def print_count_result(self):
+        if not self.cursor.result:
+            return
+        print 'count'
+        print '-----'
+        print self.cursor.result[0]
+        self.printout("")
+
+    def print_result(self):
+        # first pass: see if we have a static column set
+        last_description = None
+        for row in self.cursor:
+            if last_description is not None and self.cursor.description != last_description:
+                static = False
+                break
+        else:
+            static = True
+        self.cursor._reset()
+
+        if static:
+            self.print_static_result()
+        else:
+            self.print_dynamic_result()
+        self.printout("")
+
+    def print_static_result(self):
+        # first pass, get widths
+        widths = defaultdict(lambda: 0)
+        for row in self.cursor:
+            for desc, value in zip(self.cursor.description, row):
+                name = desc[0]
+                widths[name] = max(widths[name], len(str(name)), len(str(value)))
+        self.cursor._reset()
+                
+        # print header
+        for desc in self.cursor.description:
+            name = desc[0]
+            width = widths[name]
+            self.printout(" ", newline=False)
+            self.printout(string.rjust(str(name), width), MAGENTA, False)
+            self.printout(" |", newline=False)
+        self.printout("")
+
+        # print row data
+        for row in self.cursor:
+            for desc, value in zip(self.cursor.description, row):
+                name = desc[0]
+                width = widths[desc[0]]
+                self.printout(" ", newline=False)
+                self.printout(string.rjust(str(value), width), YELLOW, False)
+                self.printout(" |", newline=False)
+            self.printout("")
+
+    def print_dynamic_result(self):
+        for row in self.cursor:
+            self.printout(" ", newline=False)
+            for desc, value in zip(self.cursor.description, row):
+                name = desc[0]
+                self.printout(str(name), MAGENTA, False)
+                self.printout(",", newline=False)
+                self.printout(str(value), YELLOW, False)
+                self.printout(" | ", newline=False)
+            self.printout("")
 
     def emptyline(self):
         pass
@@ -229,7 +288,7 @@ class Shell(cmd.Cmd):
         if newline:
             out.write("\n");
 
-    def printerr(self, text, color=None, newline=True):
+    def printerr(self, text, color=RED, newline=True):
         self.printout(text, color, newline, sys.stderr)
 
 if __name__ == '__main__':
@@ -260,17 +319,16 @@ if __name__ == '__main__':
                   color=options.color,
                   username=options.username,
                   password=options.password)
-    while(True):
+    while True:
         try:
             shell.cmdloop()
         except SystemExit:
             readline.write_history_file(HISTORY)
             break
         except cql.Error, cqlerr:
-            shell.printerr(str(cqlerr), color=RED)
+            shell.printerr(str(cqlerr))
         except KeyboardInterrupt:
             shell.reset_statement()
             print
         except Exception, err:
-            shell.printerr("Exception: %s" % err, color=RED)
-
+            shell.printerr("Exception: %s" % err)

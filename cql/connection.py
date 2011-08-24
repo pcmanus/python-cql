@@ -23,7 +23,6 @@ from cql.cassandra.ttypes import AuthenticationRequest
 
 
 class Connection(object):
-
     def __init__(self, host, port, keyspace, user=None, password=None):
         """
         Params:

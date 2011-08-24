@@ -54,12 +54,12 @@ class TestPrepare(unittest.TestCase):
     def test_prepares(self):
         "test prepared queries against known standards"
         for (i, test) in enumerate(TESTS):
-            a = prepare(test, **ARGUMENTS[i])
+            a = prepare(test, ARGUMENTS[i])
             b = STANDARDS[i]
             assert a == b, "\n%s !=\n%s" % (a, b)
 
     def test_bad(self):
         "ensure bad calls raise exceptions"
-        self.assertRaises(KeyError, prepare, ":a :b", a=1)
-        self.assertRaises(cql.ProgrammingError, prepare, ":a :b", a=1, b=2, c=3)
-        self.assertRaises(cql.ProgrammingError, prepare, "none", a=1)
+        self.assertRaises(KeyError, prepare, ":a :b", {'a': 1})
+        self.assertRaises(cql.ProgrammingError, prepare, ":a :b", {'a': 1, 'b': 2, 'c': 3})
+        self.assertRaises(cql.ProgrammingError, prepare, "none", {'a': 1})

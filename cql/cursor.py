@@ -31,16 +31,19 @@ from cql.cassandra.ttypes import (
     SchemaDisagreementException)
 
 _COUNT_DESCRIPTION = (None, None, None, None, None, None, None)
+_VOID_DESCRIPTION = (None)
 
 class Cursor:
-
-    _keyspace_re = re.compile("USE (\w+);?", re.I | re.M)
-    _cfamily_re = re.compile("\s*SELECT\s+.+\s+FROM\s+[\']?(\w+)", re.I | re.M)
-    _ddl_re = re.compile("\s*(CREATE|ALTER|DROP)\s+", re.I | re.M)
+    _keyspace_re = re.compile("USE (\w+);?",
+                              re.IGNORECASE | re.MULTILINE)
+    _cfamily_re = re.compile("\s*SELECT\s+.+?\s+FROM\s+[\']?(\w+)",
+                             re.IGNORECASE | re.MULTILINE | re.DOTALL)
+    _ddl_re = re.compile("\s*(CREATE|ALTER|DROP)\s+",
+                         re.IGNORECASE | re.MULTILINE)
 
     def __init__(self, parent_connection):
         self.open_socket = True
-        self.parent_connection = parent_connection
+        self._connection = parent_connection
 
         self.description = None # A list of 7-tuples: 
                                 #  (column_name, type_code, none, none,
@@ -51,7 +54,7 @@ class Cursor:
         self.rowcount = -1      # Populate on execute()
         self.compression = 'GZIP'
 
-        self._query_ks = self.parent_connection.keyspace
+        self._query_ks = self._connection.keyspace
         self._query_cf = None
         self.decoder = SchemaDecoder(self.__get_schema())
 
@@ -102,7 +105,7 @@ class Cursor:
             return d
 
         schema = {}
-        client = self.parent_connection.client
+        client = self._connection.client
         for ksdef in client.describe_keyspaces():
             schema[ksdef.name] = column_families(ksdef.cf_defs)
         return schema
@@ -125,7 +128,7 @@ class Cursor:
         request_compression = getattr(Compression, self.compression)
 
         try:
-            client = self.parent_connection.client
+            client = self._connection.client
             response = client.execute_cql_query(compressed_q, request_compression)
         except InvalidRequestException, ire:
             raise cql.ProgrammingError("Bad Request: %s" % ire.why)
@@ -148,13 +151,19 @@ class Cursor:
             self.rowcount = len(self.result)
             if self.result:
                 self.description = self.decoder.decode_description(self._query_ks, self._query_cf, self.result[0])
-
-        if response.type == CqlResultType.INT:
+        elif response.type == CqlResultType.INT:
             self.result = [(response.num,)]
             self.rs_idx = 0
             self.rowcount = 1
             # TODO: name could be the COUNT expression
             self.description = _COUNT_DESCRIPTION
+        elif response.type == CqlResultType.VOID:
+            self.result = []
+            self.rs_idx = 0
+            self.rowcount = 0
+            self.description = _VOID_DESCRIPTION
+        else:
+            raise Exception('unknown result type ' + response.type)
 
         # 'Return values are not defined.'
         return True
@@ -174,13 +183,16 @@ class Cursor:
 
     def fetchone(self):
         self.__checksock()
+        if self.rs_idx == len(self.result):
+            return None
+
         row = self.result[self.rs_idx]
         self.rs_idx += 1
-        if self.description != _COUNT_DESCRIPTION:
+        if self.description == _COUNT_DESCRIPTION:
+            return row
+        else:
             self.description = self.decoder.decode_description(self._query_ks, self._query_cf, row)
             return self.decoder.decode_row(self._query_ks, self._query_cf, row)
-        else:
-            return row
 
     def fetchmany(self, size=None):
         self.__checksock()
@@ -198,18 +210,22 @@ class Cursor:
         return self.fetchmany(len(self.result) - self.rs_idx)
 
     ###
+    # extra, for cqlsh
+    ###
+    
+    def _reset(self):
+        self.rs_idx = 0
+
+    ###
     # Iterator extension
     ###
 
     def next(self):
-        raise Warning("DB-API extension cursor.next() used")
-
         if self.rs_idx >= len(self.result):
             raise StopIteration
         return self.fetchone()
 
     def __iter__(self):
-        raise Warning("DB-API extension cursor.__iter__() used")
         return self
 
     ###
@@ -235,4 +251,4 @@ class Cursor:
     def __checksock(self):
         if not self.open_socket:
             raise cql.InternalError("Cursor belonging to %s has been closed." %
-                                    (self.parent_connection, ))
+                                    (self._connection, ))
