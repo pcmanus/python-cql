@@ -1,2 +1,4 @@
 1.0.4
- * fix issues with parameters being escaped incorrectly in Python CQL (CASSANDRA-2993)
+ * fix issues with parameters being escaped incorrectly in Python CQL
+   (CASSANDRA-2993)
+ * relocate to Apache Extras/Google Code
