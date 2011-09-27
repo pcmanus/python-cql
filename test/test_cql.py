@@ -480,12 +480,24 @@ class TestCql(object):
             AND strategy_class = 'NetworkTopologyStrategy'
         """)
 
+        cursor.execute("""
+        CREATE SCHEMA TestKeyspace43 WITH strategy_options:1 = 2 AND strategy_options:2 = 3
+            AND strategy_class = 'NetworkTopologyStrategy'
+        """)
+
         # TODO: temporary (until this can be done with CQL).
         ksdef = thrift_client.describe_keyspace("TestKeyspace42")
 
         strategy_class = "org.apache.cassandra.locator.NetworkTopologyStrategy"
         assert ksdef.strategy_class == strategy_class
         assert ksdef.strategy_options['DC1'] == "1"
+
+        ksdef = thrift_client.describe_keyspace("TestKeyspace43")
+
+        strategy_class = "org.apache.cassandra.locator.NetworkTopologyStrategy"
+        assert ksdef.strategy_class == strategy_class
+        assert ksdef.strategy_options['1'] == '2'
+        assert ksdef.strategy_options['2'] == '3'
 
     def test_drop_keyspace(self):
         "removing a keyspace"
@@ -1441,3 +1453,4 @@ class TestCql(object):
 
         cursor.execute("USE " + self.keyspace)
         cursor.execute("DROP KEYSPACE KeyAliasKeyspace")
+
