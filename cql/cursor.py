@@ -65,7 +65,7 @@ class Cursor:
     def prepare(self, query, params):
         return prepare(query, params)
 
-    def execute(self, cql_query, params={}):
+    def execute(self, cql_query, params={}, decoder=None):
         self.__checksock()
         self.rs_idx = 0
         self.rowcount = 0
@@ -98,7 +98,7 @@ class Cursor:
             raise cql.InternalError("Internal application error")
 
         if response.type == CqlResultType.ROWS:
-            self.decoder = SchemaDecoder(response.schema)
+            self.decoder = (decoder or SchemaDecoder)(response.schema)
             self.result = response.rows
             self.rs_idx = 0
             self.rowcount = len(self.result)
