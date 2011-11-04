@@ -16,7 +16,7 @@
 # limitations under the License.
 
 import cql
-from marshal import (unmarshallers, unmarshal_noop)
+from cql.marshal import (unmarshallers, unmarshal_noop)
 
 class SchemaDecoder(object):
     """

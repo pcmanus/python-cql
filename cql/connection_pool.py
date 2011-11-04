@@ -18,7 +18,7 @@
 from Queue import Queue, Empty
 from threading import Thread
 from time import sleep
-from connection import Connection
+from cql.connection import Connection
 
 __all__ = ['ConnectionPool']
 

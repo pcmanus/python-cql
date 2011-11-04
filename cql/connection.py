@@ -15,8 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from cursor import Cursor
-from cassandra import Cassandra
+from cql.cursor import Cursor
+from cql.cassandra import Cassandra
 from thrift.transport import TTransport, TSocket
 from thrift.protocol import TBinaryProtocol
 from cql.cassandra.ttypes import AuthenticationRequest

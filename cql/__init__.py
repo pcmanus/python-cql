@@ -19,8 +19,8 @@ import exceptions
 import datetime
 import time
 
-import connection
-import marshal
+from cql import connection
+from cql import marshal
 
 
 # dbapi Error hierarchy
