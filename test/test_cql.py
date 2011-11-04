@@ -16,7 +16,13 @@
 # limitations under the License.
 
 # to run a single test, run from trunk/:
-# PYTHONPATH=test nosetests --tests=system.test_cql:TestCql.test_column_count
+# PYTHONPATH=test nosetests --tests=test_cql:TestCql.test_column_count
+
+# Note that some tests will fail if run against a cluster with
+# RandomPartitioner.
+
+# to configure behavior, define $CQL_TEST_HOST to the destination address
+# for Thrift connections, and $CQL_TEST_PORT to the associated port.
 
 from os.path import abspath, dirname, join
 from random import choice
@@ -24,14 +30,17 @@ from thrift.transport import TTransport
 from thrift.transport import TSocket
 from thrift.transport import THttpClient
 from thrift.protocol import TBinaryProtocol
-import sys, uuid, time
+import sys, os, uuid, time
+
+TEST_HOST = os.environ.get('CQL_TEST_HOST', 'localhost')
+TEST_PORT = int(os.environ.get('CQL_TEST_PORT', 9170))
 
 sys.path.append(join(abspath(dirname(__file__)), '..'))
 
 import cql
 from cql.cassandra import Cassandra
 
-def get_thrift_client(host='127.0.0.1', port=9170):
+def get_thrift_client(host=TEST_HOST, port=TEST_PORT):
     socket = TSocket.TSocket(host, port)
     transport = TTransport.TFramedTransport(socket)
     protocol = TBinaryProtocol.TBinaryProtocol(transport)
@@ -158,7 +167,7 @@ class TestCql(object):
     keyspace = None
 
     def setUp(self):
-        dbconn = cql.connect('localhost', 9170)
+        dbconn = cql.connect(TEST_HOST, TEST_PORT)
         self.cursor = dbconn.cursor()
         self.keyspace = create_schema(self.cursor)
         load_sample(self.cursor)
