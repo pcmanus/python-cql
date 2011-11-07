@@ -18,7 +18,7 @@
 # to run a single test, run from trunk/:
 # PYTHONPATH=test nosetests --tests=test_cql:TestCql.test_column_count
 
-# Note that some tests will fail if run against a cluster with
+# Note that some tests will be skipped if run against a cluster with
 # RandomPartitioner.
 
 # to configure behavior, define $CQL_TEST_HOST to the destination address
@@ -31,6 +31,7 @@ from thrift.transport import TSocket
 from thrift.transport import THttpClient
 from thrift.protocol import TBinaryProtocol
 import sys, os, uuid, time
+import unittest
 
 TEST_HOST = os.environ.get('CQL_TEST_HOST', 'localhost')
 TEST_PORT = int(os.environ.get('CQL_TEST_PORT', 9170))
@@ -162,7 +163,7 @@ def load_sample(dbconn):
     """)
 
 
-class TestCql(object):
+class TestCql(unittest.TestCase):
     cursor = None
     keyspace = None
 
@@ -181,11 +182,14 @@ class TestCql(object):
 
         # Cleanup keyspaces created by test-cases
         for ks in ("AlterTableKS", "CreateCFKeyspace", "Keyspace4CFDrop", \
-                "TestKeyspace42", "DropIndexTests"):
+                "TestKeyspace42", "TestKeyspace43", "DropIndexTests"):
             try:
                 self.cursor.execute("DROP KEYSPACE :ks", dict(ks=ks))
             except:
                 pass
+
+    def get_partitioner(self):
+        return thrift_client.describe_partitioner()
 
         
     def test_select_simple(self):
@@ -215,6 +219,10 @@ class TestCql(object):
 
     def test_select_row_range(self):
         "retrieve a range of rows with columns"
+
+        if self.get_partitioner().split('.')[-1] == 'RandomPartitioner':
+            self.skipTest("Key ranges don't make sense under RP")
+
         # everything
         cursor = self.cursor
         cursor.execute("SELECT * FROM StandardLongA")
@@ -297,13 +305,6 @@ class TestCql(object):
         row = cursor.fetchone()
         assert ['1', '2', '3'] == row, row
         
-        cursor.execute("""
-            SELECT key,20,40 FROM StandardIntegerA
-            WHERE KEY > 'k1' AND KEY < 'k7' LIMIT 5
-        """)
-        row = cursor.fetchone()
-        assert ['k2', 'f', 'h'] == row, row
-
         # range of columns (slice) by row with FIRST
         cursor.execute("SELECT FIRST 1 1..3 FROM StandardLongA WHERE KEY = 'aa'")
         assert cursor.rowcount == 1
@@ -315,6 +316,7 @@ class TestCql(object):
         assert cursor.rowcount == 1, "%d != 1" % cursor.rowcount
         row = cursor.fetchone()
         assert ['3', '2'] == row, row
+
 
     def test_select_range_with_single_column_results(self):
         "range should not fail when keys were not set"
@@ -333,14 +335,18 @@ class TestCql(object):
 
         assert cursor.rowcount == 3, "expected 3 results, got %d" % cursor.rowcount
 
+        # if using RP, these won't be sorted, so we'll sort. other tests take care of
+        # checking sorted-ness under non-RP partitioners anyway.
+        rows = sorted(cursor.fetchall())
+
         # two of three results should contain one column "name", third should be empty
         for i in range(1, 3):
-            r = cursor.fetchone()
+            r = rows[i - 1]
             assert len(r) == 2
-            assert r[0] == "user%d" % i
-            assert r[1] == "%s" % i
+            assert r[0] == "user%d" % i, r
+            assert r[1] == "%s" % i, r
 
-        r = cursor.fetchone()
+        r = rows[2]
         assert len(r) == 2
         assert r[0] == "user3"
         assert r[1] == None
@@ -374,6 +380,10 @@ class TestCql(object):
 
     def test_index_scan_with_start_key(self):
         "indexed scan with a starting key"
+
+        if self.get_partitioner().split('.')[-1] == 'RandomPartitioner':
+            self.skipTest("Key ranges don't make sense under RP")
+
         cursor = self.cursor
         cursor.execute("""
             SELECT KEY, 'birthdate' FROM IndexedA 
@@ -388,7 +398,7 @@ class TestCql(object):
         cursor = self.cursor
         cursor.execute("SELECT KEY, 'col' FROM StandardString1 LIMIT 3")
         assert cursor.rowcount == 3
-        rows = cursor.fetchmany(3)
+        rows = sorted(cursor.fetchmany(3))
         assert rows[0][0] == "ka"
         assert rows[1][0] == "kb"
         assert rows[2][0] == "kc"
