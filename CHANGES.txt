@@ -1,3 +1,15 @@
+1.0.6 (UNRELEASED)
+ * allow override of SchemaDecoder
+ * put value type in row descriptions, not column name type
+ * improve python2.4 support
+ * add support for unmarshalling boolean, date, decimal, float, double
+ * avoid relative in-package imports
+ * remove cqlsh
+ * add Debian packaging
+
+1.0.5
+ * burn a version to keep Google Code's downloads happy
+
 1.0.4
  * fix issues with parameters being escaped incorrectly in Python CQL
    (CASSANDRA-2993)
