@@ -32,7 +32,8 @@ class SchemaDecoder(object):
             name = column.name
             comparator = schema.name_types.get(name, schema.default_name_type)
             unmarshal = unmarshallers.get(comparator, unmarshal_noop)
-            description.append((unmarshal(name), comparator, None, None, None, None, True))
+            validator = schema.value_types.get(name, schema.default_value_type)
+            description.append((unmarshal(name), validator, None, None, None, None, True))
         return description
 
     def decode_row(self, row):
@@ -46,6 +47,6 @@ class SchemaDecoder(object):
             name = column.name
             validator = schema.value_types.get(name, schema.default_value_type)
             unmarshal = unmarshallers.get(validator, unmarshal_noop)
-            values.append(unmarshallers.get(validator, unmarshal_noop)(column.value))
+            values.append(unmarshal(column.value))
 
         return values
