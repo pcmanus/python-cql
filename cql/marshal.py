@@ -17,7 +17,7 @@
 
 import re
 import struct
-from uuid import UUID
+from decimal import Decimal
 
 import cql
 
@@ -29,6 +29,13 @@ if hasattr(struct, 'Struct'): # new in Python 2.5
    _int32_packer = struct.Struct('>i')
 else:
     _have_struct = False
+
+try:
+    from uuid import UUID  # new in Python 2.5
+except ImportError:
+    class UUID:
+        def __init__(self, bytes):
+            self.bytes = bytes
 
 _param_re = re.compile(r"(?<!strategy_options)(?<!\\)(:[a-zA-Z_][a-zA-Z0-9_]*)", re.M)
 
