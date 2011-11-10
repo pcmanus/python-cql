@@ -1,4 +1,4 @@
-1.0.6 (UNRELEASED)
+1.0.6
  * allow override of SchemaDecoder
  * put value type in row descriptions, not column name type
  * improve python2.4 support
@@ -6,6 +6,7 @@
  * avoid relative in-package imports
  * remove cqlsh
  * add Debian packaging
+ * fix PyPI dependency on thrift
 
 1.0.5
  * burn a version to keep Google Code's downloads happy
