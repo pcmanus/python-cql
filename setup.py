@@ -27,7 +27,7 @@ setup(
     maintainer_email='client-dev@cassandra.apache.org',
     url="http://code.google.com/a/apache-extras.org/p/cassandra-dbapi2",
     packages=["cql", "cql.cassandra"],
-    requires=["thrift"],
+    install_requires=["thrift"],
     provides=["cql"],
     classifiers=[
         "Development Status :: 4 - Beta",
