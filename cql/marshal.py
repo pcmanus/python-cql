@@ -118,7 +118,7 @@ if _have_struct:
             return None
         return _float_packer.unpack(bytestr)[0]
 else:
-    def unmarshal_long(bytestr):
+    def unmarshal_float(bytestr):
         if not bytestr:
             return None
         return struct.unpack(">f", bytestr)[0]
@@ -129,7 +129,7 @@ if _have_struct:
             return None
         return _double_packer.unpack(bytestr)[0]
 else:
-    def unmarshal_long(bytestr):
+    def unmarshal_double(bytestr):
         if not bytestr:
             return None
         return struct.unpack(">d", bytestr)[0]
