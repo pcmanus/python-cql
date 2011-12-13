@@ -30,12 +30,24 @@ USE Keyspace;
 """
 SELECT :a..:b FROM ColumnFamily;
 """,
+"""
+CREATE KEYSPACE foo WITH strategy_class='SimpleStrategy' AND strategy_options:replication_factor = :_a_;
+""",
+"""
+CREATE COLUMNFAMILY blah WITH somearg:another=:opt AND foo='bar':baz AND option=:value:suffix;
+""",
+"""
+SELECT :lo..:hi FROM ColumnFamily WHERE KEY=':dontsubstthis' AND col > /* ignore :this */ :colval23;
+""",
 )
 
 ARGUMENTS = (
     {'a': 1, 'b': 3, 'c': long(1000), 'd': long(3000), 'e': "key", 'f': unicode("val")},
     {},
     {'a': "a'b", 'b': "c'd'e"},
+    {'_a_': 12},
+    {'opt': "abc'", 'unused': 'thatsok', 'value': '\n'},
+    {'lo': ' ', 'hi': ':hi', 'colval23': 0.2},
 )
 
 STANDARDS = (
@@ -48,18 +60,25 @@ USE Keyspace;
 """
 SELECT 'a''b'..'c''d''e' FROM ColumnFamily;
 """,
+"""
+CREATE KEYSPACE foo WITH strategy_class='SimpleStrategy' AND strategy_options:replication_factor = 12;
+""",
+"""
+CREATE COLUMNFAMILY blah WITH somearg:another='abc''' AND foo='bar':baz AND option='
+':suffix;
+""",
+"""
+SELECT ' '..':hi' FROM ColumnFamily WHERE KEY=':dontsubstthis' AND col >                    0.2;
+""",
 )
 
 class TestPrepare(unittest.TestCase):
     def test_prepares(self):
         "test prepared queries against known standards"
-        for (i, test) in enumerate(TESTS):
-            a = prepare(test, ARGUMENTS[i])
-            b = STANDARDS[i]
-            assert a == b, "\n%s !=\n%s" % (a, b)
+        for test, args, standard in zip(TESTS, ARGUMENTS, STANDARDS):
+            prepared = prepare(test, args)
+            self.assertEqual(prepared, standard)
 
     def test_bad(self):
         "ensure bad calls raise exceptions"
         self.assertRaises(KeyError, prepare, ":a :b", {'a': 1})
-        self.assertRaises(cql.ProgrammingError, prepare, ":a :b", {'a': 1, 'b': 2, 'c': 3})
-        self.assertRaises(cql.ProgrammingError, prepare, "none", {'a': 1})
