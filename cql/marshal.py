@@ -21,7 +21,7 @@ from decimal import Decimal
 
 import cql
 
-__all__ = ['prepare', 'marshal', 'unmarshal_noop', 'unmarshallers']
+__all__ = ['prepare', 'cql_quote', 'unmarshal_noop', 'unmarshallers']
 
 if hasattr(struct, 'Struct'): # new in Python 2.5
    _have_struct = True
@@ -39,7 +39,23 @@ except ImportError:
         def __init__(self, bytes):
             self.bytes = bytes
 
-_param_re = re.compile(r"(?<!strategy_options)(?<!\\)(:[a-zA-Z_][a-zA-Z0-9_]*)", re.M)
+_param_re = re.compile(r"""
+    (                           # stuff that is not substitution markers
+      (?:  ' [^']* '            # string literal; ignore colons in here
+        |  [^']                 # eat anything else
+      )*?
+    )
+    (?<! [a-zA-Z0-9_'] )        # no colons immediately preceded by an ident or str literal
+    :
+    ( [a-zA-Z_][a-zA-Z0-9_]* )  # the param name
+""", re.S | re.X)
+
+_comment_re = re.compile(r"""
+    (?:  /\* .*? \*/
+      |  // [^\n]*
+      |  -- [^\n]*
+    )
+""", re.S | re.X)
 
 BYTES_TYPE = "org.apache.cassandra.db.marshal.BytesType"
 ASCII_TYPE = "org.apache.cassandra.db.marshal.AsciiType"
@@ -58,15 +74,19 @@ TIME_UUID_TYPE = "org.apache.cassandra.db.marshal.TimeUUIDType"
 COUNTER_COLUMN_TYPE = "org.apache.cassandra.db.marshal.CounterColumnType"
 
 def prepare(query, params):
-    # For every match of the form ":param_name", call marshal
-    # on kwargs['param_name'] and replace that section of the query
-    # with the result
-    new, count = re.subn(_param_re, lambda m: marshal(params[m.group(1)[1:]]), query)
-    if len(params) > count:
-        raise cql.ProgrammingError("More keywords were provided than parameters")
-    return new.replace("\:", ":")
+    """
+    For every match of the form ":param_name", call cql_quote
+    on kwargs['param_name'] and replace that section of the query
+    with the result
+    """
 
-def marshal(term):
+    # kill comments first, so that we don't have to try to parse around them.
+    # but keep the character count the same, so that location-tagged error
+    # messages still work
+    query = _comment_re.sub(lambda m: ' ' * len(m.group(0)), query)
+    return _param_re.sub(lambda m: m.group(1) + cql_quote(params[m.group(2)]), query)
+
+def cql_quote(term):
     if isinstance(term, unicode):
         return "'%s'" % __escape_quotes(term.encode('utf8'))
     elif isinstance(term, str):
@@ -177,5 +197,5 @@ def decode_bigint(term):
     return val
 
 def __escape_quotes(term):
-    assert isinstance(term, (str, unicode))
-    return term.replace("\'", "''")
+    assert isinstance(term, basestring)
+    return term.replace("'", "''")
