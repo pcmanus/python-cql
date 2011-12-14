@@ -435,7 +435,8 @@ class TestCql(unittest.TestCase):
         cursor = self.cursor
         cursor.execute('TRUNCATE StandardString1;')
         cursor.execute("SELECT 'cd1' FROM StandardString1 WHERE KEY = 'kd'")
-        assert cursor.rowcount == 0
+        assert cursor.rowcount == 0, \
+            "expected empty resultset, got %d rows" % cursor.rowcount
 
         # truncate against non-existing CF
         assert_raises(cql.ProgrammingError,
