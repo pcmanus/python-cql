@@ -221,7 +221,10 @@ class TestCql(unittest.TestCase):
         "retrieve a range of rows with columns"
 
         if self.get_partitioner().split('.')[-1] == 'RandomPartitioner':
-            self.skipTest("Key ranges don't make sense under RP")
+            # skipTest is >= Python 2.7
+            if hasattr(self, 'skipTest'):
+                self.skipTest("Key ranges don't make sense under RP")
+            else: return None
 
         # everything
         cursor = self.cursor
@@ -382,7 +385,10 @@ class TestCql(unittest.TestCase):
         "indexed scan with a starting key"
 
         if self.get_partitioner().split('.')[-1] == 'RandomPartitioner':
-            self.skipTest("Key ranges don't make sense under RP")
+            # skipTest is Python >= 2.7
+            if hasattr(self, 'skipTest'):
+                self.skipTest("Key ranges don't make sense under RP")
+            else: return None
 
         cursor = self.cursor
         cursor.execute("""
