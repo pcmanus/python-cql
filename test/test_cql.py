@@ -427,8 +427,10 @@ class TestCql(unittest.TestCase):
     def test_truncate_columnfamily(self):
         "truncating a column family"
         cursor = self.cursor
+        cursor.execute("SELECT * FROM StandardString1")
+        assert cursor.rowcount > 0
         cursor.execute('TRUNCATE StandardString1;')
-        cursor.execute("SELECT 'cd1' FROM StandardString1 WHERE KEY = 'kd'")
+        cursor.execute("SELECT * FROM StandardString1")
         assert cursor.rowcount == 0
 
         # truncate against non-existing CF
