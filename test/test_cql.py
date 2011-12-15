@@ -51,13 +51,6 @@ def get_thrift_client(host=TEST_HOST, port=TEST_PORT):
     return client
 thrift_client = get_thrift_client()
 
-def assert_raises(exception, method, *args, **kwargs):
-    try:
-        method(*args, **kwargs)
-    except exception:
-        return
-    raise AssertionError("failed to see expected exception")
-
 def uuid1bytes_to_millis(uuidbytes):
     return (uuid.UUID(bytes=uuidbytes).get_time() / 10000) - 12219292800000L
 
@@ -420,15 +413,15 @@ class TestCql(unittest.TestCase):
         assert r[0] == 7, "expected 7 results, got %d" % (r and r or 0)
 
         # count(*) and count(1) are only supported operations
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "SELECT COUNT(name) FROM StandardLongA")
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "SELECT COUNT(1..2) FROM StandardLongA")
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "SELECT COUNT(1, 2, 3) FROM StandardLongA")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "SELECT COUNT(name) FROM StandardLongA")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "SELECT COUNT(1..2) FROM StandardLongA")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "SELECT COUNT(1, 2, 3) FROM StandardLongA")
 
     def test_truncate_columnfamily(self):
         "truncating a column family"
@@ -441,9 +434,9 @@ class TestCql(unittest.TestCase):
             "expected empty resultset, got %d rows" % cursor.rowcount
 
         # truncate against non-existing CF
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "TRUNCATE notExistingCFAAAABB")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "TRUNCATE notExistingCFAAAABB")
 
     def test_delete_columns(self):
         "delete columns from a row"
@@ -542,9 +535,9 @@ class TestCql(unittest.TestCase):
 
         # Technically this should throw a ttypes.NotFound(), but this is
         # temporary and so not worth requiring it on PYTHONPATH.
-        assert_raises(Exception,
-                      thrift_client.describe_keyspace,
-                      "Keyspace4Drop")
+        self.assertRaises(Exception,
+                          thrift_client.describe_keyspace,
+                          "Keyspace4Drop")
 
     def test_create_column_family(self):
         "create a new column family"
@@ -578,16 +571,16 @@ class TestCql(unittest.TestCase):
         assert cfam.key_validation_class == "org.apache.cassandra.db.marshal.IntegerType"
 
         # Missing primary key
-        assert_raises(cql.ProgrammingError, cursor.execute, "CREATE COLUMNFAMILY NewCf2")
+        self.assertRaises(cql.ProgrammingError, cursor.execute, "CREATE COLUMNFAMILY NewCf2")
 
         # column name should not match key alias
-        assert_raises(cql.ProgrammingError, cursor.execute, "CREATE COLUMNFAMILY NewCf2 (id 'utf8' primary key, id bigint)")
+        self.assertRaises(cql.ProgrammingError, cursor.execute, "CREATE COLUMNFAMILY NewCf2 (id 'utf8' primary key, id bigint)")
 
         # Too many primary keys
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      """CREATE COLUMNFAMILY NewCf2
-                             (KEY varint PRIMARY KEY, KEY text PRIMARY KEY)""")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          """CREATE COLUMNFAMILY NewCf2
+                                 (KEY varint PRIMARY KEY, KEY text PRIMARY KEY)""")
 
         # No column defs
         cursor.execute("""CREATE COLUMNFAMILY NewCf3
@@ -650,9 +643,9 @@ class TestCql(unittest.TestCase):
         assert stuff.index_type == 0, "missing index"
 
         # already indexed
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "CREATE INDEX ON CreateIndex1 (stuff)")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "CREATE INDEX ON CreateIndex1 (stuff)")
 
     def test_drop_indexes(self):
         "droping indexes on columns"
@@ -678,9 +671,9 @@ class TestCql(unittest.TestCase):
         assert columns[0].index_type == None
         assert columns[0].index_name == None
 
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "DROP INDEX undefIndex")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "DROP INDEX undefIndex")
 
     def test_time_uuid(self):
         "store and retrieve time-based (type 1) uuids"
@@ -874,16 +867,16 @@ class TestCql(unittest.TestCase):
         # Bad writes.
 
         # Too many column values
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "INSERT INTO StandardUtf82 (KEY, :c1) VALUES (:key, :v1, :v2)",
-                      dict(c1="name1", key="key0", v1="value1", v2="value2"))
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "INSERT INTO StandardUtf82 (KEY, :c1) VALUES (:key, :v1, :v2)",
+                          dict(c1="name1", key="key0", v1="value1", v2="value2"))
 
         # Too many column names, (not enough column values)
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "INSERT INTO StandardUtf82 (KEY, :c1, :c2) VALUES (:key, :v1)",
-                      dict(c1="name1", c2="name2", key="key0", v1="value1"))
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "INSERT INTO StandardUtf82 (KEY, :c1, :c2) VALUES (:key, :v1)",
+                          dict(c1="name1", c2="name2", key="key0", v1="value1"))
 
     def test_compression_disabled(self):
         "reading and writing w/ compression disabled"
@@ -953,31 +946,33 @@ class TestCql(unittest.TestCase):
         """)
 
         # BATCH should not allow setting individual timestamp when global timestamp is set
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      """
-                        BEGIN BATCH USING TIMESTAMP 1303743619771456
-                          UPDATE USING TIMESTAMP 1303743619771318 StandardString1 SET name = 'name here' WHERE KEY = 'TimestampedUser4'
-                        APPLY BATCH
-                      """)
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          """
+                            BEGIN BATCH USING TIMESTAMP 1303743619771456
+                              UPDATE USING TIMESTAMP 1303743619771318 StandardString1
+                                     SET name = 'name here'
+                                     WHERE KEY = 'TimestampedUser4'
+                            APPLY BATCH
+                          """)
 
         # BATCH should not allow setting global TTL
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      """
-                        BEGIN BATCH USING TTL 130374
-                          UPDATE StandardString1 SET name = 'name here' WHERE KEY = 'TimestampedUser4'
-                        APPLY BATCH
-                      """)
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          """
+                            BEGIN BATCH USING TTL 130374
+                              UPDATE StandardString1 SET name = 'name here' WHERE KEY = 'TimestampedUser4'
+                            APPLY BATCH
+                          """)
 
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      """
-                      BEGIN BATCH USING CONSISTENCY ONE
-                          UPDATE USING CONSISTENCY QUORUM StandardString1 SET 'name' = 'value' WHERE KEY = 'bKey4'
-                          DELETE 'name' FROM StandardString1 WHERE KEY = 'bKey4'
-                      APPLY BATCH
-                      """)
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          """
+                          BEGIN BATCH USING CONSISTENCY ONE
+                              UPDATE USING CONSISTENCY QUORUM StandardString1 SET 'name' = 'value' WHERE KEY = 'bKey4'
+                              DELETE 'name' FROM StandardString1 WHERE KEY = 'bKey4'
+                          APPLY BATCH
+                          """)
 
     def test_multiple_keys_on_select_and_update(self):
         "select/update statements should support multiple keys by KEY IN construction"
@@ -1010,9 +1005,9 @@ class TestCql(unittest.TestCase):
         assert cursor.rowcount == 1, "expected 1 result, got %d" % cursor.rowcount
 
         # select with different KEYs AND'ed
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "SELECT * FROM StandardString1 WHERE KEY = 'mUser1' AND KEY = 'mUser2'")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "SELECT * FROM StandardString1 WHERE KEY = 'mUser1' AND KEY = 'mUser2'")
 
         # select with same KEY repeated in IN
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY IN ('mUser1', 'mUser1')")
@@ -1282,9 +1277,9 @@ class TestCql(unittest.TestCase):
         assert columns[0].validation_class == 'org.apache.cassandra.db.marshal.AsciiType'
 
         # alter column with unknown validator
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "ALTER COLUMNFAMILY NewCf1 ADD name utf8")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "ALTER COLUMNFAMILY NewCf1 ADD name utf8")
 
         # testing 'drop an existing column'
         cursor.execute("ALTER COLUMNFAMILY NewCf1 DROP name")
@@ -1297,24 +1292,24 @@ class TestCql(unittest.TestCase):
         assert len(columns) == 0
 
         # add column with unknown validator
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "ALTER COLUMNFAMILY NewCf1 ADD name utf8")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "ALTER COLUMNFAMILY NewCf1 ADD name utf8")
 
         # alter not existing column
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "ALTER COLUMNFAMILY NewCf1 ALTER name TYPE uuid")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "ALTER COLUMNFAMILY NewCf1 ALTER name TYPE uuid")
 
         # drop not existing column
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "ALTER COLUMNFAMILY NewCf1 DROP name")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "ALTER COLUMNFAMILY NewCf1 DROP name")
 
         # should raise error when column name equals key alias
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "ALTER COLUMNFAMILY NewCf1 ADD id_key utf8")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "ALTER COLUMNFAMILY NewCf1 ADD id_key utf8")
 
     
     def test_counter_column_support(self):
@@ -1381,19 +1376,19 @@ class TestCql(unittest.TestCase):
         assert len(r) == 1
 
         # can't mix counter and normal statements
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "UPDATE CounterCF SET count_me = count_me + 2, x = 'a' WHERE key = 'counter1'")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "UPDATE CounterCF SET count_me = count_me + 2, x = 'a' WHERE key = 'counter1'")
 
         # column names must match
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "UPDATE CounterCF SET count_me = count_not_me + 2 WHERE key = 'counter1'")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "UPDATE CounterCF SET count_me = count_not_me + 2 WHERE key = 'counter1'")
 
         # counters can't do ANY
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "UPDATE CounterCF USING CONSISTENCY ANY SET count_me = count_me + 2 WHERE key = 'counter1'")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "UPDATE CounterCF USING CONSISTENCY ANY SET count_me = count_me + 2 WHERE key = 'counter1'")
 
     def test_key_alias_support(self):
         "should be possible to use alias instead of KEY keyword"
@@ -1459,25 +1454,25 @@ class TestCql(unittest.TestCase):
         assert r[0] == 2, "expected id = 2, got %d" % r[0]
 
         # if alias was set you can't use KEY keyword anymore
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "INSERT INTO KeyAliasCF (KEY, username) VALUES (6, jbellis)")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "INSERT INTO KeyAliasCF (KEY, username) VALUES (6, jbellis)")
 
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "UPDATE KeyAliasCF SET username = 'xedin' WHERE KEY = 7")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "UPDATE KeyAliasCF SET username = 'xedin' WHERE KEY = 7")
 
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "DELETE FROM KeyAliasCF WHERE KEY = 2")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "DELETE FROM KeyAliasCF WHERE KEY = 2")
 
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "SELECT * FROM KeyAliasCF WHERE KEY = 2")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "SELECT * FROM KeyAliasCF WHERE KEY = 2")
 
-        assert_raises(cql.ProgrammingError,
-                      cursor.execute,
-                      "SELECT * FROM KeyAliasCF WHERE KEY IN (1, 2)")
+        self.assertRaises(cql.ProgrammingError,
+                          cursor.execute,
+                          "SELECT * FROM KeyAliasCF WHERE KEY IN (1, 2)")
 
         cursor.execute("USE " + self.keyspace)
         cursor.execute("DROP KEYSPACE KeyAliasKeyspace")
