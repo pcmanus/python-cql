@@ -192,11 +192,11 @@ class TestCql(unittest.TestCase):
         r = cursor.fetchone()
         d = cursor.description
 
-        assert d[0][0] == 'KEY'
-        assert r[0] == 'ka'
+        self.assertEqual(d[0][0], 'KEY')
+        self.assertEqual(r[0], 'ka')
 
-        assert d[1][0] == 'ca1'
-        assert r[1] == 'va1'
+        self.assertEqual(d[1][0], 'ca1')
+        self.assertEqual(r[1], 'va1')
 
         # retrieve multiple columns
         # (we deliberately request columns in non-comparator order)
@@ -205,10 +205,10 @@ class TestCql(unittest.TestCase):
         """)
 
         d = cursor.description
-        assert ['ca1', 'col', 'cd1'] == [col_dscptn[0] for col_dscptn in d], d
+        self.assertEqual(['ca1', 'col', 'cd1'], [col_dscptn[0] for col_dscptn in d])
         row = cursor.fetchone()
         # check that the column that didn't exist in the row comes back as null
-        assert [None, 'val', 'vd1'] == row, row
+        self.assertEqual([None, 'val', 'vd1'], row)
 
     def test_select_row_range(self):
         "retrieve a range of rows with columns"
@@ -223,64 +223,64 @@ class TestCql(unittest.TestCase):
         cursor = self.cursor
         cursor.execute("SELECT * FROM StandardLongA")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['aa', 'ab', 'ac', 'ad', 'ae', 'af', 'ag'] == keys, keys
+        self.assertEqual(['aa', 'ab', 'ac', 'ad', 'ae', 'af', 'ag'], keys)
 
         # [start, end], mid-row
         cursor.execute("SELECT * FROM StandardLongA WHERE KEY >= 'ad' AND KEY <= 'ag'")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['ad', 'ae', 'af', 'ag'] == keys, keys
+        self.assertEqual(['ad', 'ae', 'af', 'ag'], keys)
 
         # (start, end), mid-row
         cursor.execute("SELECT * FROM StandardLongA WHERE KEY > 'ad' AND KEY < 'ag'")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['ae', 'af'] == keys, keys
+        self.assertEqual(['ae', 'af'], keys)
 
         # [start, end], full-row
         cursor.execute("SELECT * FROM StandardLongA WHERE KEY >= 'aa' AND KEY <= 'ag'")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['aa', 'ab', 'ac', 'ad', 'ae', 'af', 'ag'] == keys, keys
+        self.assertEqual(['aa', 'ab', 'ac', 'ad', 'ae', 'af', 'ag'], keys)
 
         # (start, end), full-row
         cursor.execute("SELECT * FROM StandardLongA WHERE KEY > 'a' AND KEY < 'g'")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['aa', 'ab', 'ac', 'ad', 'ae', 'af', 'ag'] == keys, keys
+        self.assertEqual(['aa', 'ab', 'ac', 'ad', 'ae', 'af', 'ag'], keys)
 
         # LIMIT tests
 
         # no WHERE
         cursor.execute("SELECT * FROM StandardLongA LIMIT 1")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['aa'] == keys, keys
+        self.assertEqual(['aa'], keys)
 
         # with >=, non-existing key
         cursor.execute("SELECT * FROM StandardLongA WHERE KEY >= 'a' LIMIT 1")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['aa'] == keys, keys
+        self.assertEqual(['aa'], keys)
 
         # with >=, existing key
         cursor.execute("SELECT * FROM StandardLongA WHERE KEY >= 'aa' LIMIT 1")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['aa'] == keys, keys
+        self.assertEqual(['aa'], keys)
 
         # with >, non-existing key
         cursor.execute("SELECT * FROM StandardLongA WHERE KEY > 'a' LIMIT 1")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['aa'] == keys, keys
+        self.assertEqual(['aa'], keys)
 
         # with >, existing key
         cursor.execute("SELECT * FROM StandardLongA WHERE KEY > 'aa' LIMIT 1")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['ab'] == keys, keys
+        self.assertEqual(['ab'], keys)
 
         # with both > and <, existing keys
         cursor.execute("SELECT * FROM StandardLongA WHERE KEY > 'aa' and KEY < 'ag' LIMIT 5")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['ab', 'ac', 'ad', 'ae', 'af'] == keys, keys
+        self.assertEqual(['ab', 'ac', 'ad', 'ae', 'af'], keys)
 
         # with both > and <, non-existing keys
         cursor.execute("SELECT * FROM StandardLongA WHERE KEY > 'a' and KEY < 'b' LIMIT 5")
         keys = [row[0] for row in cursor.fetchall()]
-        assert ['aa', 'ab', 'ac', 'ad', 'ae'] == keys, keys
+        self.assertEqual(['aa', 'ab', 'ac', 'ad', 'ae'], keys)
 
     def test_select_columns_slice(self):
         "column slice tests"
@@ -289,29 +289,29 @@ class TestCql(unittest.TestCase):
         # * includes row key, explicit slice does not
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'ka';")
         row = cursor.fetchone()
-        assert ['ka', 'va1', 'val'] == row, row
+        self.assertEqual(['ka', 'va1', 'val'], row)
 
         cursor.execute("SELECT ''..'' FROM StandardString1 WHERE KEY = 'ka';")
         row = cursor.fetchone()
-        assert ['va1', 'val'] == row, row
+        self.assertEqual(['va1', 'val'], row)
 
         # column subsets
         cursor.execute("SELECT 1..3 FROM StandardLongA WHERE KEY = 'aa';")
-        assert cursor.rowcount == 1
+        self.assertEqual(cursor.rowcount, 1)
         row = cursor.fetchone()
-        assert ['1', '2', '3'] == row, row
+        self.assertEqual(['1', '2', '3'], row)
         
         # range of columns (slice) by row with FIRST
         cursor.execute("SELECT FIRST 1 1..3 FROM StandardLongA WHERE KEY = 'aa'")
-        assert cursor.rowcount == 1
+        self.assertEqual(cursor.rowcount, 1)
         row = cursor.fetchone()
-        assert ['1'] == row, row
+        self.assertEqual(['1'], row)
 
         # range of columns (slice) by row reversed
         cursor.execute("SELECT FIRST 2 REVERSED 3..1 FROM StandardLongA WHERE KEY = 'aa'")
-        assert cursor.rowcount == 1, "%d != 1" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         row = cursor.fetchone()
-        assert ['3', '2'] == row, row
+        self.assertEqual(['3', '2'], row)
 
 
     def test_select_range_with_single_column_results(self):
@@ -329,7 +329,7 @@ class TestCql(unittest.TestCase):
           SELECT KEY, name FROM StandardString2
         """)
 
-        assert cursor.rowcount == 3, "expected 3 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 3, msg="expected 3 results, got %d" % cursor.rowcount)
 
         # if using RP, these won't be sorted, so we'll sort. other tests take care of
         # checking sorted-ness under non-RP partitioners anyway.
@@ -338,14 +338,14 @@ class TestCql(unittest.TestCase):
         # two of three results should contain one column "name", third should be empty
         for i in range(1, 3):
             r = rows[i - 1]
-            assert len(r) == 2
-            assert r[0] == "user%d" % i, r
-            assert r[1] == "%s" % i, r
+            self.assertEqual(len(r), 2)
+            self.assertEqual(r[0], "user%d" % i)
+            self.assertEqual(r[1], "%s" % i)
 
         r = rows[2]
-        assert len(r) == 2
-        assert r[0] == "user3"
-        assert r[1] == None
+        self.assertEqual(len(r), 2, msg='r is %r, but expected length 2' % (r,))
+        self.assertEqual(r[0], "user3")
+        self.assertEqual(r[1], None)
 
     def test_index_scan_equality(self):
         "indexed scan where column equals value"
@@ -353,15 +353,15 @@ class TestCql(unittest.TestCase):
         cursor.execute("""
             SELECT KEY, birthdate FROM IndexedA WHERE birthdate = 100
         """)
-        assert cursor.rowcount == 2
+        self.assertEqual(cursor.rowcount, 2)
 
         r = cursor.fetchone()
-        assert r[0] == "asmith"
-        assert len(r) == 2
+        self.assertEqual(r[0], "asmith")
+        self.assertEqual(len(r), 2, msg='r is %r, but expected length 2' % (r,))
 
         r = cursor.fetchone()
-        assert r[0] == "dozer"
-        assert len(r) == 2
+        self.assertEqual(r[0], "dozer")
+        self.assertEqual(len(r), 2, msg='r is %r, but expected length 2' % (r,))
 
     def test_index_scan_greater_than(self):
         "indexed scan where a column is greater than a value"
@@ -370,9 +370,9 @@ class TestCql(unittest.TestCase):
             SELECT KEY, 'birthdate' FROM IndexedA 
             WHERE 'birthdate' = 100 AND 'unindexed' > 200
         """)
-        assert cursor.rowcount == 1
+        self.assertEqual(cursor.rowcount, 1)
         row = cursor.fetchone()
-        assert row[0] == "asmith", row
+        self.assertEqual(row[0], "asmith")
 
     def test_index_scan_with_start_key(self):
         "indexed scan with a starting key"
@@ -388,29 +388,29 @@ class TestCql(unittest.TestCase):
             SELECT KEY, 'birthdate' FROM IndexedA 
             WHERE 'birthdate' = 100 AND KEY >= 'asmithZ'
         """)
-        assert cursor.rowcount == 1
+        self.assertEqual(cursor.rowcount, 1)
         r = cursor.fetchone()
-        assert r[0] == "dozer"
+        self.assertEqual(r[0], "dozer")
 
     def test_no_where_clause(self):
         "empty where clause (range query w/o start key)"
         cursor = self.cursor
         cursor.execute("SELECT KEY, 'col' FROM StandardString1 LIMIT 3")
-        assert cursor.rowcount == 3
+        self.assertEqual(cursor.rowcount, 3)
         rows = sorted(cursor.fetchmany(3))
-        assert rows[0][0] == "ka"
-        assert rows[1][0] == "kb"
-        assert rows[2][0] == "kc"
+        self.assertEqual(rows[0][0], "ka")
+        self.assertEqual(rows[1][0], "kb")
+        self.assertEqual(rows[2][0], "kc")
 
     def test_column_count(self):
         "getting a result count instead of results"
         cursor = self.cursor
         cursor.execute("SELECT COUNT(*) FROM StandardLongA")
         r = cursor.fetchone()
-        assert r[0] == 7, "expected 7 results, got %d" % (r and r or 0)
+        self.assertEqual(r[0], 7)
         cursor.execute("SELECT COUNT(1) FROM StandardLongA")
         r = cursor.fetchone()
-        assert r[0] == 7, "expected 7 results, got %d" % (r and r or 0)
+        self.assertEqual(r[0], 7)
 
         # count(*) and count(1) are only supported operations
         self.assertRaises(cql.ProgrammingError,
@@ -430,8 +430,7 @@ class TestCql(unittest.TestCase):
         assert cursor.rowcount > 0
         cursor.execute('TRUNCATE StandardString1;')
         cursor.execute("SELECT * FROM StandardString1")
-        assert cursor.rowcount == 0, \
-            "expected empty resultset, got %d rows" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 0)
 
         # truncate against non-existing CF
         self.assertRaises(cql.ProgrammingError,
@@ -445,7 +444,7 @@ class TestCql(unittest.TestCase):
             SELECT 'cd1', 'col' FROM StandardString1 WHERE KEY = 'kd'
         """)
         desc = [col_d[0] for col_d in cursor.description]
-        assert ['cd1', 'col'] == desc, desc
+        self.assertEqual(['cd1', 'col'], desc)
 
         cursor.execute("""
             DELETE 'cd1', 'col' FROM StandardString1 WHERE KEY = 'kd'
@@ -454,7 +453,7 @@ class TestCql(unittest.TestCase):
             SELECT 'cd1', 'col' FROM StandardString1 WHERE KEY = 'kd'
         """)
         row = cursor.fetchone()
-        assert [None, None] == row, row
+        self.assertEqual([None, None], row)
 
     def test_delete_columns_multi_rows(self):
         "delete columns from multiple rows"
@@ -463,10 +462,10 @@ class TestCql(unittest.TestCase):
         # verify rows exist initially
         cursor.execute("SELECT 'col' FROM StandardString1 WHERE KEY = 'kc'")
         row = cursor.fetchone()
-        assert ['val'] == row, row
+        self.assertEqual(['val'], row)
         cursor.execute("SELECT 'col' FROM StandardString1 WHERE KEY = 'kd'")
         row = cursor.fetchone()
-        assert ['val'] == row, row
+        self.assertEqual(['val'], row)
 
         # delete and verify data is gone
         cursor.execute("""
@@ -474,10 +473,10 @@ class TestCql(unittest.TestCase):
         """)
         cursor.execute("SELECT 'col' FROM StandardString1 WHERE KEY = 'kc'")
         row = cursor.fetchone()
-        assert [None] == row, row
+        self.assertEqual([None], row)
         cursor.execute("SELECT 'col' FROM StandardString1 WHERE KEY = 'kd'")
         r = cursor.fetchone()
-        assert [None] == r, r
+        self.assertEqual([None], r)
 
     def test_delete_rows(self):
         "delete entire rows"
@@ -485,13 +484,13 @@ class TestCql(unittest.TestCase):
         cursor.execute("""
             SELECT 'cd1', 'col' FROM StandardString1 WHERE KEY = 'kd'
         """)
-        assert ['cd1', 'col'] == [col_d[0] for col_d in cursor.description]
+        self.assertEqual(['cd1', 'col'], [col_d[0] for col_d in cursor.description])
         cursor.execute("DELETE FROM StandardString1 WHERE KEY = 'kd'")
         cursor.execute("""
             SELECT 'cd1', 'col' FROM StandardString1 WHERE KEY = 'kd'
         """)
         row = cursor.fetchone()
-        assert [None, None] == row, row
+        self.assertEqual([None, None], row)
 
     def test_create_keyspace(self):
         "create a new keyspace"
@@ -510,15 +509,15 @@ class TestCql(unittest.TestCase):
         ksdef = thrift_client.describe_keyspace("TestKeyspace42")
 
         strategy_class = "org.apache.cassandra.locator.NetworkTopologyStrategy"
-        assert ksdef.strategy_class == strategy_class
-        assert ksdef.strategy_options['DC1'] == "1"
+        self.assertEqual(ksdef.strategy_class, strategy_class)
+        self.assertEqual(ksdef.strategy_options['DC1'], "1")
 
         ksdef = thrift_client.describe_keyspace("TestKeyspace43")
 
         strategy_class = "org.apache.cassandra.locator.NetworkTopologyStrategy"
-        assert ksdef.strategy_class == strategy_class
-        assert ksdef.strategy_options['1'] == '2'
-        assert ksdef.strategy_options['2'] == '3'
+        self.assertEqual(ksdef.strategy_class, strategy_class)
+        self.assertEqual(ksdef.strategy_options['1'], '2')
+        self.assertEqual(ksdef.strategy_options['2'], '3')
 
     def test_drop_keyspace(self):
         "removing a keyspace"
@@ -560,15 +559,13 @@ class TestCql(unittest.TestCase):
 
         # TODO: temporary (until this can be done with CQL).
         ksdef = thrift_client.describe_keyspace("CreateCFKeyspace")
-        assert len(ksdef.cf_defs) == 1, \
-            "expected 1 column family total, found %d" % len(ksdef.cf_defs)
+        self.assertEqual(len(ksdef.cf_defs), 1)
         cfam= ksdef.cf_defs[0]
-        assert len(cfam.column_metadata) == 4, \
-            "expected 4 columns, found %d" % len(cfam.column_metadata)
-        assert cfam.comment == "shiny, new, cf"
-        assert cfam.default_validation_class == "org.apache.cassandra.db.marshal.AsciiType"
-        assert cfam.comparator_type == "org.apache.cassandra.db.marshal.UTF8Type"
-        assert cfam.key_validation_class == "org.apache.cassandra.db.marshal.IntegerType"
+        self.assertEqual(len(cfam.column_metadata), 4)
+        self.assertEqual(cfam.comment, "shiny, new, cf")
+        self.assertEqual(cfam.default_validation_class, "org.apache.cassandra.db.marshal.AsciiType")
+        self.assertEqual(cfam.comparator_type, "org.apache.cassandra.db.marshal.UTF8Type")
+        self.assertEqual(cfam.key_validation_class, "org.apache.cassandra.db.marshal.IntegerType")
 
         # Missing primary key
         self.assertRaises(cql.ProgrammingError, cursor.execute, "CREATE COLUMNFAMILY NewCf2")
@@ -586,21 +583,18 @@ class TestCql(unittest.TestCase):
         cursor.execute("""CREATE COLUMNFAMILY NewCf3
                             (KEY varint PRIMARY KEY) WITH comparator = bigint""")
         ksdef = thrift_client.describe_keyspace("CreateCFKeyspace")
-        assert len(ksdef.cf_defs) == 2, \
-            "expected 3 column families total, found %d" % len(ksdef.cf_defs)
+        self.assertEqual(len(ksdef.cf_defs), 2)
         cfam = [i for i in ksdef.cf_defs if i.name == "NewCf3"][0]
-        assert cfam.comparator_type == "org.apache.cassandra.db.marshal.LongType"
+        self.assertEqual(cfam.comparator_type, "org.apache.cassandra.db.marshal.LongType")
 
         # Column defs, defaults otherwise
         cursor.execute("""CREATE COLUMNFAMILY NewCf4
                             (KEY varint PRIMARY KEY, 'a' varint, 'b' varint)
                             WITH comparator = text;""")
         ksdef = thrift_client.describe_keyspace("CreateCFKeyspace")
-        assert len(ksdef.cf_defs) == 3, \
-            "expected 4 column families total, found %d" % len(ksdef.cf_defs)
+        self.assertEqual(len(ksdef.cf_defs), 3)
         cfam = [i for i in ksdef.cf_defs if i.name == "NewCf4"][0]
-        assert len(cfam.column_metadata) == 2, \
-            "expected 2 columns, found %d" % len(cfam.column_metadata)
+        self.assertEqual(len(cfam.column_metadata), 2)
         for coldef in cfam.column_metadata:
             assert coldef.name in ("a", "b"), "Unknown column name " + coldef.name
             assert coldef.validation_class.endswith("marshal.IntegerType")
@@ -637,10 +631,9 @@ class TestCql(unittest.TestCase):
         cfam = [i for i in ksdef.cf_defs if i.name == "CreateIndex1"][0]
         items = [i for i in cfam.column_metadata if i.name == "items"][0]
         stuff = [i for i in cfam.column_metadata if i.name == "stuff"][0]
-        assert items.index_name == "namedIndex", items.index_name
-        assert items.index_type == 0, "missing index"
-        assert stuff.index_name != None, "index_name should be set"
-        assert stuff.index_type == 0, "missing index"
+        self.assertEqual(items.index_name, "namedIndex")
+        self.assertEqual(items.index_type, 0, msg="missing index")
+        self.assertNotEqual(stuff.index_name, None, msg="index_name should be set")
 
         # already indexed
         self.assertRaises(cql.ProgrammingError,
@@ -659,8 +652,8 @@ class TestCql(unittest.TestCase):
         ksdef = thrift_client.describe_keyspace("DropIndexTests")
         columns = ksdef.cf_defs[0].column_metadata
 
-        assert columns[0].index_name == "namedIndex"
-        assert columns[0].index_type == 0
+        self.assertEqual(columns[0].index_name, "namedIndex")
+        self.assertEqual(columns[0].index_type, 0)
 
         # testing "DROP INDEX <INDEX_NAME>"
         cursor.execute("DROP INDEX namedIndex")
@@ -668,8 +661,8 @@ class TestCql(unittest.TestCase):
         ksdef = thrift_client.describe_keyspace("DropIndexTests")
         columns = ksdef.cf_defs[0].column_metadata
 
-        assert columns[0].index_type == None
-        assert columns[0].index_name == None
+        self.assertEqual(columns[0].index_type, None)
+        self.assertEqual(columns[0].index_name, None)
 
         self.assertRaises(cql.ProgrammingError,
                           cursor.execute,
@@ -689,7 +682,7 @@ class TestCql(unittest.TestCase):
             SELECT '%s' FROM StandardTimeUUID WHERE KEY = 'uuidtest'
         """ % str(timeuuid))
         d = cursor.description
-        assert d[0][0] == timeuuid, "%s, %s" % (str(d[1][0]), str(timeuuid))
+        self.assertEqual(d[0][0], timeuuid)
 
         # Tests a node-side conversion from bigint to UUID.
         ms = uuid1bytes_to_millis(uuid.uuid1().bytes)
@@ -701,7 +694,7 @@ class TestCql(unittest.TestCase):
             SELECT 'id' FROM StandardTimeUUIDValues WHERE KEY = 'uuidtest'
         """)
         r = cursor.fetchone()
-        assert uuid1bytes_to_millis(r[0].bytes) == ms
+        self.assertEqual(uuid1bytes_to_millis(r[0].bytes), ms)
 
         # Tests a node-side conversion from ISO8601 to UUID.
         cursor.execute("""
@@ -715,8 +708,7 @@ class TestCql(unittest.TestCase):
         # 2011-01-31 17:00:00-0000 == 1296493200000ms
         r = cursor.fetchone()
         ms = uuid1bytes_to_millis(r[0].bytes)
-        assert ms == 1296493200000, \
-                "%d != 1296493200000 (2011-01-31 17:00:00-0000)" % ms
+        self.assertEqual(ms, 1296493200000, msg="%d != 1296493200000 (2011-01-31 17:00:00-0000)" % ms)
 
         # Tests node-side conversion of timeuuid("now") to UUID
         cursor.execute("""
@@ -743,7 +735,7 @@ class TestCql(unittest.TestCase):
             """, dict(start=uuid_range[0], finish=uuid_range[len(uuid_range)-1]))
         d = cursor.description
         for (i, col_d) in enumerate(d):
-            assert uuid_range[i] == col_d[0]
+            self.assertEqual(uuid_range[i], col_d[0])
 
 
     def test_lexical_uuid(self):
@@ -756,8 +748,7 @@ class TestCql(unittest.TestCase):
         cursor.execute("SELECT :name FROM StandardUUID WHERE KEY = 'uuidtest'",
                        dict(name=uid))
         d = cursor.description
-        assert d[0][0] == uid, "expected %s, got %s (%s)" % \
-                (uid.bytes.encode('hex'), str(d[1][0]).encode('hex'), d[1][1])
+        self.assertEqual(d[0][0], uid, msg="expected %s, got %s (%s)" % (uid, d[0][0], d[0][1]))
 
         # TODO: slices of uuids from cf w/ LexicalUUIDType comparator
 
@@ -772,19 +763,19 @@ class TestCql(unittest.TestCase):
 
         cursor.execute("SELECT * FROM StandardUtf82 WHERE KEY = k1")
         d = cursor.description
-        assert d[0][0] == 'KEY', d[0][0]
-        assert d[1][0] == u"¢", d[1][0]
-        assert d[2][0] == u"©", d[2][0]
-        assert d[3][0] == u"®", d[3][0]
-        assert d[4][0] == u"¿", d[4][0]
+        self.assertEqual(d[0][0], 'KEY')
+        self.assertEqual(d[1][0], u"¢")
+        self.assertEqual(d[2][0], u"©")
+        self.assertEqual(d[3][0], u"®")
+        self.assertEqual(d[4][0], u"¿")
 
         cursor.execute("SELECT :start..'' FROM StandardUtf82 WHERE KEY = k1", dict(start="©"))
         row = cursor.fetchone()
-        assert len(row) == 3, row
+        self.assertEqual(len(row), 3, msg='expected length 3, but got %r' % (row,))
         d = cursor.description
-        assert d[0][0] == u"©"
-        assert d[1][0] == u"®"
-        assert d[2][0] == u"¿"
+        self.assertEqual(d[0][0], u"©")
+        self.assertEqual(d[1][0], u"®")
+        self.assertEqual(d[2][0], u"¿")
 
     def test_read_write_negative_numerics(self):
         "reading and writing negative numeric values"
@@ -797,11 +788,10 @@ class TestCql(unittest.TestCase):
             cursor.execute("SELECT :start..:finish FROM :cf WHERE KEY = negatives;",
                            dict(start=-10, finish=-1, cf=cf))
             r = cursor.fetchone()
-            assert len(r) == 10, \
-                "returned %d columns, expected %d" % (len(r) - 1, 10)
+            self.assertEqual(len(r), 10)
             d = cursor.description
-            assert d[0][0] == -10
-            assert d[9][0] == -1
+            self.assertEqual(d[0][0], -10)
+            self.assertEqual(d[9][0], -1)
 
     def test_escaped_quotes(self):
         "reading and writing strings w/ escaped quotes"
@@ -814,11 +804,11 @@ class TestCql(unittest.TestCase):
         cursor.execute("""
                        SELECT 'x''and''y' FROM StandardString1 WHERE KEY = :key
                        """, dict(key="test_escaped_quotes"))
-        assert cursor.rowcount == 1
+        self.assertEqual(cursor.rowcount, 1)
         r = cursor.fetchone()
-        assert len(r) == 1, "wrong number of results"
+        self.assertEqual(len(r), 1)
         d = cursor.description
-        assert d[0][0] == "x'and'y"
+        self.assertEqual(d[0][0], "x'and'y")
 
     def test_newline_strings(self):
         "reading and writing strings w/ newlines"
@@ -831,12 +821,12 @@ class TestCql(unittest.TestCase):
         cursor.execute("""
                        SELECT :name FROM StandardString1 WHERE KEY = :key
                        """, {"key": "\nkey", "name": "\nname"})
-        assert cursor.rowcount == 1
+        self.assertEqual(cursor.rowcount, 1)
         r = cursor.fetchone()
-        assert len(r) == 1, "wrong number of results"
+        self.assertEqual(len(r), 1)
         d = cursor.description
-        assert d[0][0] == "\nname"
-        assert r[0] == "\nval"
+        self.assertEqual(d[0][0], "\nname")
+        self.assertEqual(r[0], "\nval")
 
     def test_typed_keys(self):
         "using typed keys"
@@ -858,11 +848,11 @@ class TestCql(unittest.TestCase):
         cursor.execute("SELECT * FROM StandardUtf82 WHERE KEY = :key", dict(key="meat"))
         r = cursor.fetchone()
         d = cursor.description
-        assert d[1][0] == "beef"
-        assert r[1] == "brisket"
+        self.assertEqual(d[1][0], "beef")
+        self.assertEqual(r[1], "brisket")
 
-        assert d[2][0] == "pork"
-        assert r[2] == "bacon"
+        self.assertEqual(d[2][0], "pork")
+        self.assertEqual(r[2], "bacon")
 
         # Bad writes.
 
@@ -888,11 +878,11 @@ class TestCql(unittest.TestCase):
         cursor.execute("SELECT :name FROM StandardString1 WHERE KEY = :key",
                        dict(name="some_name", key="compression_test"))
 
-        assert cursor.rowcount == 1, "expected 1 result, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
-        assert ['some_name'] == colnames, colnames
+        self.assertEqual(['some_name'], colnames)
         row = cursor.fetchone()
-        assert ['some_value'] == row, row
+        self.assertEqual(['some_value'], row)
 
     def test_batch_with_mixed_statements(self):
         "handle BATCH with INSERT/UPDATE/DELETE statements mixed in it"
@@ -911,30 +901,30 @@ class TestCql(unittest.TestCase):
         cursor.execute("SELECT :name FROM StandardString1 WHERE KEY = :key",
                        dict(name="bName", key="bKey1"))
 
-        assert cursor.rowcount == 1, "expected 1 result, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
-        assert ['bName'] == colnames, colnames
+        self.assertEqual(['bName'], colnames)
         r = cursor.fetchone()
-        assert ['bVal'] == r, r
+        self.assertEqual(['bVal'], r)
 
         cursor.execute("SELECT :name FROM StandardString1 WHERE KEY = :key",
                        dict(name="bCol2", key="bKey3"))
 
-        assert cursor.rowcount == 1, "expected 1 result, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
-        assert ['bCol2'] == colnames, colnames
+        self.assertEqual(['bCol2'], colnames)
         # was deleted by DELETE statement
         r = cursor.fetchone()
-        assert [None] == r, r
+        self.assertEqual([None], r)
 
         cursor.execute("SELECT :name FROM StandardString1 WHERE KEY = :key",
                        dict(name="bCol1", key="bKey2"))
 
-        assert cursor.rowcount == 1, "expected 1 result, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
-        assert ['bCol1'] == colnames, colnames
+        self.assertEqual(['bCol1'], colnames)
         r = cursor.fetchone()
-        assert ['bVal'] == r, r
+        self.assertEqual(['bVal'], r)
 
         # using all 3 types of statements allowed in batch to test timestamp
         cursor.execute("""
@@ -985,24 +975,20 @@ class TestCql(unittest.TestCase):
         """)
 
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY IN ('mUser1', 'mUser2')")
-        assert cursor.rowcount == 2, "expected 2 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 2)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "login", \
-               "unrecognized name '%s'" % colnames[1]
-        assert colnames[2] == "password", \
-               "unrecognized name '%s'" % colnames[2]
+        self.assertEqual(colnames[1], "login")
+        self.assertEqual(colnames[2], "password")
 
         for i in range(2):
             r = cursor.fetchone()
-            assert r[1] == "same", \
-                   "unrecognized value '%s'" % r[1]
-            assert r[2] == "p4ssw0rd", \
-                   "unrecognized value '%s'" % r[1]
+            self.assertEqual(r[1], "same")
+            self.assertEqual(r[2], "p4ssw0rd")
 
         # select with same KEY AND'ed (see CASSANDRA-2717)
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'mUser1' AND KEY = 'mUser1'")
-        assert cursor.rowcount == 1, "expected 1 result, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
 
         # select with different KEYs AND'ed
         self.assertRaises(cql.ProgrammingError,
@@ -1011,7 +997,7 @@ class TestCql(unittest.TestCase):
 
         # select with same KEY repeated in IN
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY IN ('mUser1', 'mUser1')")
-        assert cursor.rowcount == 1, "expected 1 result, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
 
     def test_insert_with_timestamp_and_ttl(self):
         "insert statement should support setting timestamp"
@@ -1023,60 +1009,52 @@ class TestCql(unittest.TestCase):
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # and INSERT with CONSISTENCY and TIMESTAMP together
         cursor.execute("INSERT INTO StandardString1 (KEY, name) VALUES ('TimestampedUser1', 'name here') USING TIMESTAMP 1303743619771318 AND CONSISTENCY ONE")
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser1'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # and INSERT with TTL
         cursor.execute("INSERT INTO StandardString1 (KEY, name) VALUES ('TimestampedUser2', 'name here') USING TTL 5678")
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser2'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # and INSERT with CONSISTENCY, TIMESTAMP and TTL together
         cursor.execute("INSERT INTO StandardString1 (KEY, name) VALUES ('TimestampedUser3', 'name here') USING TTL 4587 AND TIMESTAMP 1303743619771318 AND CONSISTENCY ONE")
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser3'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # and INSERT with TTL
         cursor.execute("INSERT INTO StandardString1 (KEY, name) VALUES ('TimestampedUser14', 'name here') USING TTL 1 AND CONSISTENCY ONE")
@@ -1086,10 +1064,10 @@ class TestCql(unittest.TestCase):
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser14'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
 
         r = cursor.fetchone()
-        assert len(r) == 1, "expected 0 results, got %d" % len(r)
+        self.assertEqual(len(r), 1)
 
     def test_update_with_timestamp_and_ttl(self):
         "update statement should support setting timestamp"
@@ -1101,60 +1079,52 @@ class TestCql(unittest.TestCase):
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser2'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # and UPDATE with CONSISTENCY and TIMESTAMP together
         cursor.execute("UPDATE StandardString1 USING CONSISTENCY ONE AND TIMESTAMP 1303743619771318 SET name = 'name here' WHERE KEY = 'TimestampedUser3'")
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser3'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # UPDATE with TTL
         cursor.execute("UPDATE StandardString1 USING TTL 13030 SET name = 'name here' WHERE KEY = 'TimestampedUser4'")
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser4'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # UPDATE with CONSISTENCY, TIMESTAMP and TTL together
         cursor.execute("UPDATE StandardString1 USING CONSISTENCY ONE AND TIMESTAMP 1303743619771318 AND TTL 13037 SET name = 'name here' WHERE KEY = 'TimestampedUser5'")
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser5'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # UPDATE with TTL
         cursor.execute("UPDATE StandardString1 USING CONSISTENCY ONE TTL 1 SET name = 'name here' WHERE KEY = 'TimestampedUser6'")
@@ -1164,10 +1134,10 @@ class TestCql(unittest.TestCase):
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser6'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
 
         r = cursor.fetchone()
-        assert len(r) == 1, "expected 0 results, got %d" % len(r)
+        self.assertEqual(len(r), 1)
 
     def test_delete_with_timestamp(self):
         "delete statement should support setting timestamp"
@@ -1179,57 +1149,51 @@ class TestCql(unittest.TestCase):
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser3'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # DELETE with a lower TIMESTAMP
         cursor.execute("DELETE 'name here' FROM StandardString1 USING TIMESTAMP 3 WHERE KEY = 'TimestampedUser3'")
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser3'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert len(colnames) == 2, "expected 2 columns, got %d" % len(colnames)
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(len(colnames), 2)
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # now DELETE the whole row with a lower TIMESTAMP
         cursor.execute("DELETE FROM StandardString1 USING TIMESTAMP 3 WHERE KEY = 'TimestampedUser3'")
 
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser3'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert len(colnames) == 2, "expected 2 columns, got %d" % len(colnames)
-        assert colnames[1] == "name", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(len(colnames), 2)
+        self.assertEqual(colnames[1], "name")
 
         r = cursor.fetchone()
-        assert r[1] == "name here", \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], "name here")
 
         # now DELETE the row with a greater TIMESTAMP
         cursor.execute("DELETE FROM StandardString1 USING TIMESTAMP 15 WHERE KEY = 'TimestampedUser3'")
         # try to read it
         cursor.execute("SELECT * FROM StandardString1 WHERE KEY = 'TimestampedUser3'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert len(colnames) == 1, "expected only the KEY column, got %d" % len(colnames)
-        assert colnames[0] == "KEY", "unrecognized name '%s'" % colnames[0]
+        self.assertEqual(len(colnames), 1, msg="expected only the KEY column, got %d columns" % len(colnames))
+        self.assertEqual(colnames[0], "KEY")
 
     def test_alter_table_statement(self):
         "test ALTER statement"
@@ -1246,35 +1210,32 @@ class TestCql(unittest.TestCase):
 
         # TODO: temporary (until this can be done with CQL).
         ksdef = thrift_client.describe_keyspace("AlterTableKS")
-        assert len(ksdef.cf_defs) == 1, \
-            "expected 1 column family total, found %d" % len(ksdef.cf_defs)
+        self.assertEqual(len(ksdef.cf_defs), 1)
         cfam = ksdef.cf_defs[0]
 
-        assert len(cfam.column_metadata) == 0
+        self.assertEqual(len(cfam.column_metadata), 0)
 
         # testing "add a new column"
         cursor.execute("ALTER COLUMNFAMILY NewCf1 ADD name varchar")
 
         ksdef = thrift_client.describe_keyspace("AlterTableKS")
-        assert len(ksdef.cf_defs) == 1, \
-            "expected 1 column family total, found %d" % len(ksdef.cf_defs)
+        self.assertEqual(len(ksdef.cf_defs), 1)
         columns = ksdef.cf_defs[0].column_metadata
 
-        assert len(columns) == 1
-        assert columns[0].name == 'name'
-        assert columns[0].validation_class == 'org.apache.cassandra.db.marshal.UTF8Type'
+        self.assertEqual(len(columns), 1)
+        self.assertEqual(columns[0].name, 'name')
+        self.assertEqual(columns[0].validation_class, 'org.apache.cassandra.db.marshal.UTF8Type')
 
         # testing "alter a column type"
         cursor.execute("ALTER COLUMNFAMILY NewCf1 ALTER name TYPE ascii")
 
         ksdef = thrift_client.describe_keyspace("AlterTableKS")
-        assert len(ksdef.cf_defs) == 1, \
-            "expected 1 column family total, found %d" % len(ksdef.cf_defs)
+        self.assertEqual(len(ksdef.cf_defs), 1)
         columns = ksdef.cf_defs[0].column_metadata
 
-        assert len(columns) == 1
-        assert columns[0].name == 'name'
-        assert columns[0].validation_class == 'org.apache.cassandra.db.marshal.AsciiType'
+        self.assertEqual(len(columns), 1)
+        self.assertEqual(columns[0].name, 'name')
+        self.assertEqual(columns[0].validation_class, 'org.apache.cassandra.db.marshal.AsciiType')
 
         # alter column with unknown validator
         self.assertRaises(cql.ProgrammingError,
@@ -1285,11 +1246,10 @@ class TestCql(unittest.TestCase):
         cursor.execute("ALTER COLUMNFAMILY NewCf1 DROP name")
 
         ksdef = thrift_client.describe_keyspace("AlterTableKS")
-        assert len(ksdef.cf_defs) == 1, \
-            "expected 1 column family total, found %d" % len(ksdef.cf_defs)
+        self.assertEqual(len(ksdef.cf_defs), 1)
         columns = ksdef.cf_defs[0].column_metadata
 
-        assert len(columns) == 0
+        self.assertEqual(len(columns), 0)
 
         # add column with unknown validator
         self.assertRaises(cql.ProgrammingError,
@@ -1319,61 +1279,53 @@ class TestCql(unittest.TestCase):
         # increment counter
         cursor.execute("UPDATE CounterCF SET count_me = count_me + 2 WHERE key = 'counter1'")
         cursor.execute("SELECT * FROM CounterCF WHERE KEY = 'counter1'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "count_me", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "count_me")
 
         r = cursor.fetchone()
-        assert r[1] == 2, \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], 2)
 
         cursor.execute("UPDATE CounterCF SET count_me = count_me + 2 WHERE key = 'counter1'")
         cursor.execute("SELECT * FROM CounterCF WHERE KEY = 'counter1'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "count_me", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "count_me")
 
         r = cursor.fetchone()
-        assert r[1] == 4, \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], 4)
 
         # decrement counter
         cursor.execute("UPDATE CounterCF SET count_me = count_me - 4 WHERE key = 'counter1'")
         cursor.execute("SELECT * FROM CounterCF WHERE KEY = 'counter1'")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "count_me", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "count_me")
 
         r = cursor.fetchone()
-        assert r[1] == 0, \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], 0)
 
         cursor.execute("SELECT * FROM CounterCF")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
 
-        assert colnames[1] == "count_me", \
-               "unrecognized name '%s'" % colnames[1]
+        self.assertEqual(colnames[1], "count_me")
 
         r = cursor.fetchone()
-        assert r[1] == 0, \
-               "unrecognized value '%s'" % r[1]
+        self.assertEqual(r[1], 0)
 
         # deleting a counter column
         cursor.execute("DELETE count_me FROM CounterCF WHERE KEY = 'counter1'")
         cursor.execute("SELECT * FROM CounterCF")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
-        assert len(colnames) == 1
+        self.assertEqual(len(colnames), 1)
 
         r = cursor.fetchone()
-        assert len(r) == 1
+        self.assertEqual(len(r), 1)
 
         # can't mix counter and normal statements
         self.assertRaises(cql.ProgrammingError,
@@ -1412,46 +1364,45 @@ class TestCql(unittest.TestCase):
         ksdef = thrift_client.describe_keyspace("KeyAliasKeyspace")
         cfdef = ksdef.cf_defs[0]
 
-        assert len(ksdef.cf_defs) == 1, \
-            "expected 1 column family total, found %d" % len(ksdef.cf_defs)
-        assert cfdef.key_alias == 'id', "expected 'id' alias, got %s" % cfdef.key_alias
+        self.assertEqual(len(ksdef.cf_defs), 1)
+        self.assertEqual(cfdef.key_alias, 'id')
 
         # try do insert/update
         cursor.execute("INSERT INTO KeyAliasCF (id, username) VALUES (1, jbellis)")
 
         # check if we actually stored anything
         cursor.execute("SELECT * FROM KeyAliasCF WHERE id = 1")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
-        assert len(colnames) == 2
+        self.assertEqual(len(colnames), 2)
 
         r = cursor.fetchone()
-        assert len(r) == 2, "expected 2, got %d" % len(r)
-        assert r[0] == 1
-        assert r[1] == 'jbellis'
+        self.assertEqual(len(r), 2)
+        self.assertEqual(r[0], 1)
+        self.assertEqual(r[1], 'jbellis')
 
         cursor.execute("UPDATE KeyAliasCF SET username = 'xedin' WHERE id = 2")
 
         # check if we actually stored anything
         cursor.execute("SELECT * FROM KeyAliasCF WHERE id = 2")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
         colnames = [col_d[0] for col_d in cursor.description]
-        assert len(colnames) == 2
+        self.assertEqual(len(colnames), 2)
 
         r = cursor.fetchone()
-        assert len(r) == 2, "expected 2, got %d" % len(r)
-        assert r[0] == 2
-        assert r[1] == 'xedin'
+        self.assertEqual(len(r), 2)
+        self.assertEqual(r[0], 2)
+        self.assertEqual(r[1], 'xedin')
 
         # delete with key alias
         cursor.execute("DELETE FROM KeyAliasCF WHERE id = 2")
         # check if we actually stored anything
         cursor.execute("SELECT * FROM KeyAliasCF WHERE id = 2")
-        assert cursor.rowcount == 1, "expected 1 results, got %d" % cursor.rowcount
+        self.assertEqual(cursor.rowcount, 1)
 
         r = cursor.fetchone()
-        assert len(r) == 1, "expected 1, got %s" % r
-        assert r[0] == 2, "expected id = 2, got %d" % r[0]
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0], 2)
 
         # if alias was set you can't use KEY keyword anymore
         self.assertRaises(cql.ProgrammingError,

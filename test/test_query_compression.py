@@ -23,4 +23,4 @@ class TestCompression(unittest.TestCase):
         query = "SELECT \"foo\" FROM Standard1 WHERE KEY = \"bar\";"
         compressed = zlib.compress(query)
         decompressed = zlib.decompress(compressed)
-        assert query == decompressed, "Decompressed query did not match"
+        self.assertEqual(query, decompressed)

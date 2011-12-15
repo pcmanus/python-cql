@@ -56,7 +56,7 @@ class TestPrepare(unittest.TestCase):
         for (i, test) in enumerate(TESTS):
             a = prepare(test, ARGUMENTS[i])
             b = STANDARDS[i]
-            assert a == b, "\n%s !=\n%s" % (a, b)
+            self.assertEqual(a, b)
 
     def test_bad(self):
         "ensure bad calls raise exceptions"
