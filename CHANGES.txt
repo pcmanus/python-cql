@@ -1,3 +1,9 @@
+1.0.7 - 2011/12/27
+ * Comply with ASF licensing requirements
+ * Fixed unit test for TRUNCATE
+ * Improve recognition of substitution parameters (":foo")
+ * Fix some unmarshallers when used under python2.4
+
 1.0.6
  * allow override of SchemaDecoder
  * put value type in row descriptions, not column name type
