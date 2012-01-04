@@ -1428,3 +1428,24 @@ class TestCql(unittest.TestCase):
         cursor.execute("USE " + self.keyspace)
         cursor.execute("DROP KEYSPACE KeyAliasKeyspace")
 
+    def test_key_in_projection_semantics(self):
+        "selecting on key always returns at least one result"
+        # See: https://issues.apache.org/jira/browse/CASSANDRA-3424
+        cursor = self.cursor
+
+        # Key exists, column does not
+        cursor.execute("SELECT ka, t0t4llyb0gus FROM StandardString1 WHERE KEY = ka")
+        assert cursor.rowcount == 1, "expected exactly 1 result, got %d" % cursor.rowcount
+
+        # Key does not exist
+        cursor.execute("SELECT t0t4llyb0gus FROM StandardString1 WHERE KEY = t0t4llyb0gus")
+        assert cursor.rowcount == 1, "expected exactly 1 result, got %d" % cursor.rowcount
+
+        # Key does not exist
+        cursor.execute("SELECT * FROM StandardString1 WHERE KEY = t0t4llyb0gus")
+        assert cursor.rowcount == 1, "expected exactly 1 result, got %d" % cursor.rowcount
+
+        # Without explicit key, No Means No (results)
+        cursor.execute("TRUNCATE StandardString1")
+        cursor.execute("SELECT * FROM StandardString1")
+        assert cursor.rowcount == 0, "expected zero results, got %d" % cursor.rowcount
