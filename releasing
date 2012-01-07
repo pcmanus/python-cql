@@ -1,0 +1,73 @@
+==================
+RELEASE PROCEDURES
+==================
+
+---------------------
+master/source release
+---------------------
+
+in master,
+
+ * update 'version' in setup.py
+ * `$ git commit -m "release ${version}" -- setup.py`
+ * `$ PYTHONPATH=. CQL_TEST_HOST=9160 trial test`  (make sure all pass)
+ * `$ python setup.py sdist`
+ * check that `dist/cql-${version}.tar.gz` has all expected files in the expected places
+ * test it
+ * REMOVE `dist/cql-${version}.tar.gz`; we're going to build it again for the upload and don't want confusion with multiple versions
+
+ * `$ python setup.py bdist`
+ * check that `dist/cql-${version}.${arch_triple}.tar.gz` has all expected files in the expected places
+ * REMOVE `dist/cql-${version}.${arch_triple}.tar.gz`
+
+ * `$ git tag ${version}`
+
+------ POINT OF NO RETURN ------
+
+ * `$ git push origin refs/tags/${version}`
+ * `$ python setup.py sdist upload -s`
+
+ * go to http://code.google.com/a/apache-extras.org/p/cassandra-dbapi2/downloads/list, choose "New download"
+   * Summary: "${version} release"
+   * Description: can leave blank
+   * File: dist/cql-${version}.tar.gz  (make sure this is the same copy that pypi got)
+   * Labels: Type-Source, OpSys-All, Featured
+
+ * remove the "Featured" labels from any old releases, if appropriate
+
+--------------
+debian release
+--------------
+
+:: 
+
+  git checkout debian
+  git merge "tags/${version}"   # merge changes from master into the debian branch
+  # fix merge conflicts if necessary
+  dch -v "${version}-1"   # fill in appropriate changelog lines for new version
+  git commit -m "debian changelog ${version}-1" -- debian/changelog
+  git tag "debian/${version}-1"
+  git archive --format=tar --prefix="cassandra-dbapi2-${version}/" "refs/tags/${version}" | gzip -c -9 > "../python-cql_${version}.orig.tar.gz"
+  pristine-tar commit "../python-cql_${version}.orig.tar.gz" "refs/tags/${version}"
+
+  git-buildpackage -us -uc --git-dist=lenny
+  sudo debi    # test that package install, uninstall work right
+  dcmd scp ../python-cql_${version}-1_amd64.changes ${webserverhost}:
+
+--------------
+redhat release
+--------------
+
+::
+
+  git checkout redhat
+  git merge "tags/${version}"
+  # fix merge conflicts if necessary
+  vi redhat/python26-cql.spec    # change Version to $version, Release to 1
+  git commit -m "redhat spec ${version}-1" -- redhat/python26-cql.spec
+  git tag "redhat/${version}-1"
+  spectool -g -S -R redhat/python26-cql.spec
+
+  rpmbuild -ba redhat/python26-cql.spec
+  # test installing/upgrading/uninstalling new rpm at ~/rpmbuild/RPMS/noarch/python26-cql-${version}-1.noarch.rpm
+  scp $HOME/rpmbuild/RPMS/noarch/python26-cql-${version}-1.noarch.rpm ${webserverhost}:
