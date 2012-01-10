@@ -5,7 +5,7 @@ Standard use:
  >> import cql
  >> con = cql.connect(host, port, keyspace)
  >> cursor = con.cursor()
- >> cursor.execute("CQL QUERY", {kw=Foo, kw2=Bar, etc...})
+ >> cursor.execute("CQL QUERY", dict(kw='Foo', kw2='Bar, etc...))
 
     - cursor.description  # None initially, list of N tuples that represent
                               the N columns in a row after an execute. Only 
@@ -25,4 +25,4 @@ Standard use:
 
 Query substitution:
  - Use named parameters and a dictionary of names and values. 
-    e.g. execute("SELECT * FROM CF WHERE name=:name", name="Foo")
+    e.g. execute("SELECT * FROM CF WHERE name=:name", {"name": "Foo"})
