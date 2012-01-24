@@ -39,6 +39,12 @@ CREATE COLUMNFAMILY blah WITH somearg:another=:opt AND foo='bar':baz AND option=
 """
 SELECT :lo..:hi FROM ColumnFamily WHERE KEY=':dontsubstthis' AND col > /* ignore :this */ :colval23;
 """,
+"""
+USE :some_ks;
+""",
+"""
+INSERT INTO cf (key, col1, col2) VALUES ('http://one.two.three/four?five /* :name */', :name);
+""",
 )
 
 ARGUMENTS = (
@@ -48,6 +54,8 @@ ARGUMENTS = (
     {'_a_': 12},
     {'opt': "abc'", 'unused': 'thatsok', 'value': '\n'},
     {'lo': ' ', 'hi': ':hi', 'colval23': 0.2},
+    {'some_ks': 'abc'},
+    {'name': "// a literal 'comment'"},
 )
 
 STANDARDS = (
@@ -69,6 +77,12 @@ CREATE COLUMNFAMILY blah WITH somearg:another='abc''' AND foo='bar':baz AND opti
 """,
 """
 SELECT ' '..':hi' FROM ColumnFamily WHERE KEY=':dontsubstthis' AND col >                    0.2;
+""",
+"""
+USE 'abc';
+""",
+"""
+INSERT INTO cf (key, col1, col2) VALUES ('http://one.two.three/four?five /* :name */', '// a literal ''comment''');
 """,
 )
 
