@@ -51,11 +51,11 @@ _param_re = re.compile(r"""
 """, re.S | re.X)
 
 _comment_re = re.compile(r"""
-    (?:  /\* .*? \*/
-      |  // [^\n]*
-      |  -- [^\n]*
-    )
-""", re.S | re.X)
+       // .*? $
+    |  -- .*? $
+    |  /\* .*? \*/
+    | ' [^']* '
+""", re.S | re.M | re.X)
 
 BYTES_TYPE = "org.apache.cassandra.db.marshal.BytesType"
 ASCII_TYPE = "org.apache.cassandra.db.marshal.AsciiType"
@@ -73,6 +73,14 @@ LEXICAL_UUID_TYPE = "org.apache.cassandra.db.marshal.LexicalType"
 TIME_UUID_TYPE = "org.apache.cassandra.db.marshal.TimeUUIDType"
 COUNTER_COLUMN_TYPE = "org.apache.cassandra.db.marshal.CounterColumnType"
 
+def blank_comments(query):
+    def teh_blanker(match):
+        m = match.group(0)
+        if m.startswith("'"):
+            return m
+        return ' ' * len(m)
+    return _comment_re.sub(teh_blanker, query)
+
 def prepare(query, params):
     """
     For every match of the form ":param_name", call cql_quote
@@ -83,7 +91,7 @@ def prepare(query, params):
     # kill comments first, so that we don't have to try to parse around them.
     # but keep the character count the same, so that location-tagged error
     # messages still work
-    query = _comment_re.sub(lambda m: ' ' * len(m.group(0)), query)
+    query = blank_comments(query)
     return _param_re.sub(lambda m: m.group(1) + cql_quote(params[m.group(2)]), query)
 
 def cql_quote(term):
