@@ -54,6 +54,7 @@ debian release
   git-buildpackage -us -uc --git-dist=lenny
   sudo debi    # test that package install, uninstall work right
   dcmd scp ../python-cql_${version}-1_amd64.changes ${webserverhost}:
+  git push origin debian refs/tags/debian/${version}-1
 
 --------------
 redhat release
@@ -72,3 +73,4 @@ redhat release
   rpmbuild -ba redhat/python26-cql.spec
   # test installing/upgrading/uninstalling new rpm at ~/rpmbuild/RPMS/noarch/python26-cql-${version}-1.noarch.rpm
   scp $HOME/rpmbuild/RPMS/noarch/python26-cql-${version}-1.noarch.rpm ${webserverhost}:
+  git push origin redhat refs/tags/redhat/${version}-1
