@@ -9,8 +9,9 @@ master/source release
 in master,
 
  * update 'version' in setup.py
- * `$ git commit -m "release ${version}" -- setup.py`
- * `$ PYTHONPATH=. CQL_TEST_HOST=9160 trial test`  (make sure all pass)
+ * update CHANGES.txt
+ * `$ git commit -m "release ${version}" -- setup.py CHANGES.txt`
+ * `$ PYTHONPATH=. CQL_TEST_PORT=9160 nosetests`  (make sure all pass)
  * `$ python setup.py sdist`
  * check that `dist/cql-${version}.tar.gz` has all expected files in the expected places
  * test it
