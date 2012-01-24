@@ -1,3 +1,8 @@
+1.0.8 - 2012/01/24
+ * Fix handling of comment-like markers inside CQL string literals
+   (since comments must be stripped out to achieve proper recognition
+   of named parameters)
+
 1.0.7 - 2011/12/27
  * Comply with ASF licensing requirements
  * Fixed unit test for TRUNCATE
