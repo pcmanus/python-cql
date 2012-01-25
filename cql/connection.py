@@ -23,7 +23,7 @@ from cql.cassandra.ttypes import AuthenticationRequest
 
 
 class Connection(object):
-    def __init__(self, host, port, keyspace, user=None, password=None):
+    def __init__(self, host, port, keyspace, user=None, password=None, cql_version=None):
         """
         Params:
         * host .........: hostname of Cassandra node.
@@ -31,6 +31,7 @@ class Connection(object):
         * keyspace .....: keyspace to connect to.
         * user .........: username used in authentication (optional).
         * password .....: password used in authentication (optional).
+        * cql_version...: CQL version to use (optional).
         """
         self.host = host
         self.port = port
@@ -47,6 +48,9 @@ class Connection(object):
         if user and password:
             credentials = {"username": user, "password": password}
             self.client.login(AuthenticationRequest(credentials=credentials))
+
+        if cql_version:
+            self.client.set_cql_version(cql_version)
 
         if keyspace:
             c = self.cursor()

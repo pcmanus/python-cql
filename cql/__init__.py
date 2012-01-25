@@ -46,8 +46,8 @@ threadsafety = 1 # Threads may share the module, but not connections/cursors.
 paramstyle = 'named'
 
 # TODO: Pull connections out of a pool instead.
-def connect(host, port=9160, keyspace='system', user=None, password=None):
-    return connection.Connection(host, port, keyspace, user, password)
+def connect(host, port=9160, keyspace='system', user=None, password=None, cql_version=None):
+    return connection.Connection(host, port, keyspace, user, password, cql_version)
 
 # Module Type Objects and Constructors
 
