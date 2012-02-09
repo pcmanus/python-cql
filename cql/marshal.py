@@ -105,67 +105,121 @@ def cql_quote(term):
 def unmarshal_noop(bytestr):
     return bytestr
 
+marshal_noop = unmarshal_noop
+
 def unmarshal_bool(bytestr):
     if not bytestr:
         return None
     return bool(ord(bytestr[0]))
 
+def marshal_bool(truth):
+    if truth is None:
+        return ''
+    return chr(bool(truth))
+
 def unmarshal_utf8(bytestr):
     return bytestr.decode("utf8")
+
+def marshal_utf8(ustr):
+    if ustr is None:
+        return ''
+    return ustr.encode('utf8')
 
 if _have_struct:
     def unmarshal_int32(bytestr):
         if not bytestr:
             return None
         return _int32_packer.unpack(bytestr)[0]
+    def marshal_int32(i):
+        if i is None:
+            return ''
+        return _int32_packer.pack(i)
 else:
     def unmarshal_int32(bytestr):
         if not bytestr:
             return None
         return struct.unpack(">i", bytestr)[0]
+    def marshal_int32(i):
+        if i is None:
+            return ''
+        return struct.pack('>i', i)
 
 def unmarshal_int(bytestr):
     if not bytestr:
         return None
     return decode_bigint(bytestr)
 
+def marshal_int(bigint):
+    if bigint is None:
+        return ''
+    return encode_bigint(bigint)
+
 if _have_struct:
     def unmarshal_long(bytestr):
         if not bytestr:
             return None
         return _long_packer.unpack(bytestr)[0]
+    def marshal_long(longint):
+        if longint is None:
+            return ''
+        return _long_packer.pack(longint)
 else:
     def unmarshal_long(bytestr):
         if not bytestr:
             return None
         return struct.unpack(">q", bytestr)[0]
+    def marshal_long(longint):
+        if longint is None:
+            return ''
+        return struct.pack(">q", longint)
 
 if _have_struct:
     def unmarshal_float(bytestr):
         if not bytestr:
             return None
         return _float_packer.unpack(bytestr)[0]
+    def marshal_float(f):
+        if f is None:
+            return ''
+        return _float_packer.pack(f)
 else:
     def unmarshal_float(bytestr):
         if not bytestr:
             return None
         return struct.unpack(">f", bytestr)[0]
+    def marshal_float(f):
+        if f is None:
+            return ''
+        return struct.pack('>f', f)
 
 if _have_struct:
     def unmarshal_double(bytestr):
         if not bytestr:
             return None
         return _double_packer.unpack(bytestr)[0]
+    def marshal_double(d):
+        if d is None:
+            return ''
+        return _double_packer.pack(d)
 else:
     def unmarshal_double(bytestr):
         if not bytestr:
             return None
         return struct.unpack(">d", bytestr)[0]
+    def marshal_double(d):
+        if d is None:
+            return ''
+        return struct.pack('>d', d)
 
 def unmarshal_date(bytestr):
     if not bytestr:
         return None
     return unmarshal_long(bytestr) / 1000.0
+
+def marshal_date(date):
+    if date is None:
+        return ''
+    return marshal_long(date * 1000)
 
 def unmarshal_decimal(bytestr):
     if not bytestr:
@@ -174,10 +228,26 @@ def unmarshal_decimal(bytestr):
     unscaled = decode_bigint(bytestr[4:])
     return Decimal('%de%d' % (unscaled, -scale))
 
+def marshal_decimal(dec):
+    if dec is None:
+        return ''
+    sign, digits, exponent = dec.as_tuple()
+    unscaled = int(''.join([str(digit) for digit in digits]))
+    if sign:
+        unscaled *= -1
+    scale = marshal_int32(-exponent)
+    unscaled = encode_bigint(unscaled)
+    return scale + unscaled
+
 def unmarshal_uuid(bytestr):
     if not bytestr:
         return None
     return UUID(bytes=bytestr)
+
+def marshal_uuid(uuid):
+    if uuid is None:
+        return ''
+    return uuid.bytes
 
 unmarshallers = {BYTES_TYPE:          unmarshal_noop,
                  ASCII_TYPE:          unmarshal_noop,
@@ -198,11 +268,52 @@ for name, typ in unmarshallers.items():
     short_name = name.split('.')[-1]
     unmarshallers[short_name] = typ
 
+marshallers =   {BYTES_TYPE:          marshal_noop,
+                 ASCII_TYPE:          marshal_noop,
+                 BOOLEAN_TYPE:        marshal_bool,
+                 DATE_TYPE:           marshal_date,
+                 DECIMAL_TYPE:        marshal_decimal,
+                 UTF8_TYPE:           marshal_utf8,
+                 INT32_TYPE:          marshal_int32,
+                 INTEGER_TYPE:        marshal_int,
+                 LONG_TYPE:           marshal_long,
+                 FLOAT_TYPE:          marshal_float,
+                 DOUBLE_TYPE:         marshal_double,
+                 UUID_TYPE:           marshal_uuid,
+                 LEXICAL_UUID_TYPE:   marshal_uuid,
+                 TIME_UUID_TYPE:      marshal_uuid,
+                 COUNTER_COLUMN_TYPE: marshal_long}
+for name, typ in marshallers.items():
+    short_name = name.split('.')[-1]
+    marshallers[short_name] = typ
+
 def decode_bigint(term):
     val = int(term.encode('hex'), 16)
     if (ord(term[0]) & 128) != 0:
         val = val - (1 << (len(term) * 8))
     return val
+
+def bitlength(n):
+    bitlen = 0
+    while n > 0:
+        n >>= 1
+        bitlen += 1
+    return bitlen
+
+def encode_bigint(big):
+    pos = True
+    if big < 0:
+        bytelength = bitlength(abs(big) - 1) / 8 + 1
+        big = (1 << bytelength * 8) + big
+        pos = False
+    revbytes = []
+    while big > 0:
+        revbytes.append(chr(big & 0xff))
+        big >>= 8
+    if pos and ord(revbytes[-1]) & 0x80:
+        revbytes.append('\x00')
+    revbytes.reverse()
+    return ''.join(revbytes)
 
 def __escape_quotes(term):
     assert isinstance(term, basestring)
