@@ -27,8 +27,8 @@ from cql.cassandra.ttypes import (
     InvalidRequestException,
     UnavailableException,
     TimedOutException,
-    TApplicationException,
     SchemaDisagreementException)
+from thrift.Thrift import TApplicationException
 
 _COUNT_DESCRIPTION = (None, None, None, None, None, None, None)
 _VOID_DESCRIPTION = (None)
