@@ -19,7 +19,7 @@ import re
 import zlib
 
 import cql
-from cql.marshal import prepare
+from cql.marshal import prepare_inline, prepare_query, PreparedQuery
 from cql.decoders import SchemaDecoder
 from cql.cassandra.ttypes import (
     Compression, 
@@ -33,6 +33,8 @@ from thrift.Thrift import TApplicationException
 _COUNT_DESCRIPTION = (None, None, None, None, None, None, None)
 _VOID_DESCRIPTION = (None)
 
+MIN_THRIFT_FOR_PREPARED_QUERIES = (19, 27, 0)
+
 class Cursor:
     _keyspace_re = re.compile("USE (\w+);?",
                               re.IGNORECASE | re.MULTILINE)
@@ -40,6 +42,7 @@ class Cursor:
                              re.IGNORECASE | re.MULTILINE | re.DOTALL)
     _ddl_re = re.compile("\s*(CREATE|ALTER|DROP)\s+",
                          re.IGNORECASE | re.MULTILINE)
+    supports_prepared_queries = False
 
     def __init__(self, parent_connection):
         self.open_socket = True
@@ -55,6 +58,10 @@ class Cursor:
         self.compression = 'GZIP'
         self.decoder = None
 
+        if hasattr(parent_connection.client, 'execute_prepared_cql_query') \
+                and parent_connection.remote_thrift_version >= MIN_THRIFT_FOR_PREPARED_QUERIES:
+            self.supports_prepared_queries = True
+
     ###
     # Cursor API
     ###
@@ -62,29 +69,60 @@ class Cursor:
     def close(self):
         self.open_socket = False
 
-    def prepare(self, query, params):
-        return prepare(query, params)
+    def compress_query_text(self, querytext):
+        if self.compression == 'GZIP':
+            compressed_q = zlib.compress(querytext)
+        else:
+            compressed_q = querytext
+        req_compression = getattr(Compression, self.compression)
+        return compressed_q, req_compression
 
-    def execute(self, cql_query, params={}, decoder=None):
+    def prepare_inline(self, query, params):
+        try:
+            prepared_q_text = prepare_inline(query, params)
+        except KeyError, e:
+            raise cql.ProgrammingError("Unmatched named substitution: " +
+                                       "%s not given for %r" % (e, query))
+        return self.compress_query_text(prepared_q_text)
+
+    def prepare_query(self, query, paramtypes=None):
+        prepared_q_text, paramnames = prepare_query(query)
+        compressed_q, compression = self.compress_query_text(prepared_q_text)
+        presult = self._connection.client.prepare_cql_query(compressed_q, compression)
+        assert presult.count == len(paramnames)
+        if presult.variable_types is None and presult.count > 0:
+            raise cql.ProgrammingError("Cassandra did not provide types for bound"
+                                       " parameters. Prepared statements are only"
+                                       " supported with cql3.")
+        return PreparedQuery(query, presult.itemId, presult.variable_types, paramnames)
+
+    def pre_execution_setup(self):
         self.__checksock()
         self.rs_idx = 0
         self.rowcount = 0
         self.description = None
-        try:
-            prepared_q = self.prepare(cql_query, params)
-        except KeyError, e:
-            raise cql.ProgrammingError("Unmatched named substitution: " +
-                                       "%s not given for %s" % (e, cql_query))
 
-        if self.compression == 'GZIP':
-            compressed_q = zlib.compress(prepared_q)
-        else:
-            compressed_q = prepared_q
-        request_compression = getattr(Compression, self.compression)
+    def execute(self, cql_query, params={}, decoder=None):
+        self.pre_execution_setup()
 
+        prepared_q, compress = self.prepare_inline(cql_query, params)
+        doquery = self._connection.client.execute_cql_query
+        response = self.handle_cql_execution_errors(doquery, prepared_q, compress)
+
+        return self.process_execution_results(response, decoder=decoder)
+
+    def execute_prepared(self, prepared_query, params={}, decoder=None):
+        self.pre_execution_setup()
+
+        doquery = self._connection.client.execute_prepared_cql_query
+        paramvals = prepared_query.encode_params()
+        response = self.handle_cql_execution_errors(doquery, prepared_query.itemid, paramvals)
+
+        return self.process_execution_results(response, decoder=decoder)
+
+    def handle_cql_execution_errors(self, executor, *args, **kwargs):
         try:
-            client = self._connection.client
-            response = client.execute_cql_query(compressed_q, request_compression)
+            return executor(*args, **kwargs)
         except InvalidRequestException, ire:
             raise cql.ProgrammingError("Bad Request: %s" % ire.why)
         except SchemaDisagreementException, sde:
@@ -97,6 +135,7 @@ class Cursor:
         except TApplicationException, tapp:
             raise cql.InternalError("Internal application error")
 
+    def process_execution_results(self, response, decoder=None):
         if response.type == CqlResultType.ROWS:
             self.decoder = (decoder or SchemaDecoder)(response.schema)
             self.result = response.rows

@@ -49,6 +49,8 @@ class Connection(object):
             credentials = {"username": user, "password": password}
             self.client.login(AuthenticationRequest(credentials=credentials))
 
+        self.remote_thrift_version = tuple(map(int, self.client.describe_version().split('.')))
+
         if cql_version:
             self.client.set_cql_version(cql_version)
 

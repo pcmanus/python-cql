@@ -21,7 +21,8 @@ from decimal import Decimal
 
 import cql
 
-__all__ = ['prepare', 'cql_quote', 'unmarshal_noop', 'unmarshallers']
+__all__ = ['prepare_inline', 'prepare_query', 'cql_quote', 'unmarshal_noop', 'unmarshallers',
+           'cql_marshal', 'PreparedQuery']
 
 if hasattr(struct, 'Struct'): # new in Python 2.5
    _have_struct = True
@@ -73,6 +74,19 @@ LEXICAL_UUID_TYPE = "org.apache.cassandra.db.marshal.LexicalType"
 TIME_UUID_TYPE = "org.apache.cassandra.db.marshal.TimeUUIDType"
 COUNTER_COLUMN_TYPE = "org.apache.cassandra.db.marshal.CounterColumnType"
 
+class PreparedQuery(object):
+    def __init__(self, querytext, itemid, vartypes, paramnames):
+        self.querytext = querytext
+        self.itemid = itemid
+        self.vartypes = vartypes
+        self.paramnames = paramnames
+        if len(self.vartypes) != len(self.paramnames):
+            raise cql.ProgrammingError("Length of variable types list is not the same"
+                                       " length as the list of parameter names")
+
+    def encode_params(self, params):
+        return [cql_marshal(params[n], t) for (n, t) in zip(self.paramnames, self.vartypes)]
+
 def blank_comments(query):
     def teh_blanker(match):
         m = match.group(0)
@@ -81,7 +95,7 @@ def blank_comments(query):
         return ' ' * len(m)
     return _comment_re.sub(teh_blanker, query)
 
-def prepare(query, params):
+def prepare_inline(query, params):
     """
     For every match of the form ":param_name", call cql_quote
     on kwargs['param_name'] and replace that section of the query
@@ -93,6 +107,18 @@ def prepare(query, params):
     # messages still work
     query = blank_comments(query)
     return _param_re.sub(lambda m: m.group(1) + cql_quote(params[m.group(2)]), query)
+
+def prepare_query(querytext):
+    querytext = blank_comments(querytext)
+    paramnames = []
+    def found_param(match):
+        pre_param_text = match.group(1)
+        paramname = match.group(2)
+        paramnames.append(paramname)
+        return pre_param_text + '?'
+    transformed_query = _param_re.sub(found_param, querytext)
+    return transformed_query, paramnames
+
 
 def cql_quote(term):
     if isinstance(term, unicode):
