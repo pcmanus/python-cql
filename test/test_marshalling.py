@@ -18,9 +18,9 @@ import unittest
 from decimal import Decimal
 from uuid import UUID
 import cql
-from cql.marshal import unmarshallers, unmarshal_noop
+from cql.marshal import unmarshallers, marshallers, unmarshal_noop, marshal_noop
 
-demarshal_me = (
+marshalled_value_pairs = (
     ('lorem ipsum dolor sit amet', 'AsciiType', 'lorem ipsum dolor sit amet'),
     ('', 'AsciiType', ''),
     ('\x01', 'BooleanType', True),
@@ -66,12 +66,23 @@ demarshal_me = (
 
 class TestUnmarshal(unittest.TestCase):
     def test_unmarshalling(self):
-        for serializedval, valtype, marshaledval in demarshal_me:
+        for serializedval, valtype, nativeval in marshalled_value_pairs:
             unmarshaller = unmarshallers.get(valtype, unmarshal_noop)
             whatwegot = unmarshaller(serializedval)
-            self.assertEqual(whatwegot, marshaledval,
+            self.assertEqual(whatwegot, nativeval,
                              msg='Unmarshaller for %s (%s) failed: unmarshal(%r) got %r instead of %r'
-                                 % (valtype, unmarshaller, serializedval, whatwegot, marshaledval))
-            self.assertEqual(type(whatwegot), type(marshaledval),
+                                 % (valtype, unmarshaller, serializedval, whatwegot, nativeval))
+            self.assertEqual(type(whatwegot), type(nativeval),
                              msg='Unmarshaller for %s (%s) gave wrong type (%s instead of %s)'
-                                 % (valtype, unmarshaller, type(whatwegot), type(marshaledval)))
+                                 % (valtype, unmarshaller, type(whatwegot), type(nativeval)))
+
+    def test_marshalling(self):
+        for serializedval, valtype, nativeval in marshalled_value_pairs:
+            marshaller = marshallers.get(valtype, marshal_noop)
+            whatwegot = marshaller(nativeval)
+            self.assertEqual(whatwegot, serializedval,
+                             msg='Marshaller for %s (%s) failed: marshal(%r) got %r instead of %r'
+                                 % (valtype, marshaller, nativeval, whatwegot, serializedval))
+            self.assertEqual(type(whatwegot), type(serializedval),
+                             msg='Marshaller for %s (%s) gave wrong type (%s instead of %s)'
+                                 % (valtype, marshaller, type(whatwegot), type(serializedval)))
