@@ -2894,7 +2894,6 @@ class KsDef:
    - name
    - strategy_class
    - strategy_options
-   - replication_factor: @deprecated
    - cf_defs
    - durable_writes
   """
@@ -2904,16 +2903,15 @@ class KsDef:
     (1, TType.STRING, 'name', None, None, ), # 1
     (2, TType.STRING, 'strategy_class', None, None, ), # 2
     (3, TType.MAP, 'strategy_options', (TType.STRING,None,TType.STRING,None), None, ), # 3
-    (4, TType.I32, 'replication_factor', None, None, ), # 4
+    None, # 4
     (5, TType.LIST, 'cf_defs', (TType.STRUCT,(CfDef, CfDef.thrift_spec)), None, ), # 5
     (6, TType.BOOL, 'durable_writes', None, True, ), # 6
   )
 
-  def __init__(self, name=None, strategy_class=None, strategy_options=None, replication_factor=None, cf_defs=None, durable_writes=thrift_spec[6][4],):
+  def __init__(self, name=None, strategy_class=None, strategy_options=None, cf_defs=None, durable_writes=thrift_spec[6][4],):
     self.name = name
     self.strategy_class = strategy_class
     self.strategy_options = strategy_options
-    self.replication_factor = replication_factor
     self.cf_defs = cf_defs
     self.durable_writes = durable_writes
 
@@ -2945,11 +2943,6 @@ class KsDef:
             _val119 = iprot.readString();
             self.strategy_options[_key118] = _val119
           iprot.readMapEnd()
-        else:
-          iprot.skip(ftype)
-      elif fid == 4:
-        if ftype == TType.I32:
-          self.replication_factor = iprot.readI32();
         else:
           iprot.skip(ftype)
       elif fid == 5:
@@ -2993,10 +2986,6 @@ class KsDef:
         oprot.writeString(kiter126)
         oprot.writeString(viter127)
       oprot.writeMapEnd()
-      oprot.writeFieldEnd()
-    if self.replication_factor is not None:
-      oprot.writeFieldBegin('replication_factor', TType.I32, 4)
-      oprot.writeI32(self.replication_factor)
       oprot.writeFieldEnd()
     if self.cf_defs is not None:
       oprot.writeFieldBegin('cf_defs', TType.LIST, 5)
@@ -3357,17 +3346,20 @@ class CqlPreparedResult:
   Attributes:
    - itemId
    - count
+   - variable_types
   """
 
   thrift_spec = (
     None, # 0
     (1, TType.I32, 'itemId', None, None, ), # 1
     (2, TType.I32, 'count', None, None, ), # 2
+    (3, TType.LIST, 'variable_types', (TType.STRING,None), None, ), # 3
   )
 
-  def __init__(self, itemId=None, count=None,):
+  def __init__(self, itemId=None, count=None, variable_types=None,):
     self.itemId = itemId
     self.count = count
+    self.variable_types = variable_types
 
   def read(self, iprot):
     if iprot.__class__ == TBinaryProtocol.TBinaryProtocolAccelerated and isinstance(iprot.trans, TTransport.CReadableTransport) and self.thrift_spec is not None and fastbinary is not None:
@@ -3388,6 +3380,16 @@ class CqlPreparedResult:
           self.count = iprot.readI32();
         else:
           iprot.skip(ftype)
+      elif fid == 3:
+        if ftype == TType.LIST:
+          self.variable_types = []
+          (_etype164, _size161) = iprot.readListBegin()
+          for _i165 in xrange(_size161):
+            _elem166 = iprot.readString();
+            self.variable_types.append(_elem166)
+          iprot.readListEnd()
+        else:
+          iprot.skip(ftype)
       else:
         iprot.skip(ftype)
       iprot.readFieldEnd()
@@ -3405,6 +3407,13 @@ class CqlPreparedResult:
     if self.count is not None:
       oprot.writeFieldBegin('count', TType.I32, 2)
       oprot.writeI32(self.count)
+      oprot.writeFieldEnd()
+    if self.variable_types is not None:
+      oprot.writeFieldBegin('variable_types', TType.LIST, 3)
+      oprot.writeListBegin(TType.STRING, len(self.variable_types))
+      for iter167 in self.variable_types:
+        oprot.writeString(iter167)
+      oprot.writeListEnd()
       oprot.writeFieldEnd()
     oprot.writeFieldStop()
     oprot.writeStructEnd()
