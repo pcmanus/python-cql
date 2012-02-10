@@ -17,12 +17,22 @@
 
 import re
 import struct
+import time
+import calendar
 from decimal import Decimal
 
 import cql
 
 __all__ = ['prepare_inline', 'prepare_query', 'cql_quote', 'unmarshal_noop', 'unmarshallers',
            'cql_marshal', 'PreparedQuery']
+
+cql_time_formats = (
+    '%Y-%m-%d %H:%M',
+    '%Y-%m-%d %H:%M:%S',
+    '%Y-%m-%dT%H:%M',
+    '%Y-%m-%dT%H:%M:%S',
+    '%Y-%m-%d'
+)
 
 if hasattr(struct, 'Struct'): # new in Python 2.5
    _have_struct = True
@@ -245,6 +255,21 @@ def unmarshal_date(bytestr):
 def marshal_date(date):
     if date is None:
         return ''
+    if isinstance(date, basestring):
+        if date[-5] in ('+', '-'):
+            offset = (int(date[-4:-2]) * 3600 + int(date[-2:]) * 60) * int(date[-5] + '1')
+            date = date[:-5]
+        else:
+            offset = -time.timezone
+        for tformat in cql_time_formats:
+            try:
+                tval = time.strptime(date, tformat)
+            except ValueError:
+                continue
+            date = calendar.timegm(tval) + offset
+            break
+        else:
+            raise ValueError("can't interpret %r as a date" % (date,))
     return marshal_long(date * 1000)
 
 def unmarshal_decimal(bytestr):
