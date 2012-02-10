@@ -17,7 +17,7 @@
 
 import unittest
 import cql
-from cql.marshal import prepare
+from cql.marshal import prepare_inline
 
 # TESTS[i] ARGUMENTS[i] -> STANDARDS[i]
 TESTS = (
@@ -90,9 +90,9 @@ class TestPrepare(unittest.TestCase):
     def test_prepares(self):
         "test prepared queries against known standards"
         for test, args, standard in zip(TESTS, ARGUMENTS, STANDARDS):
-            prepared = prepare(test, args)
+            prepared = prepare_inline(test, args)
             self.assertEqual(prepared, standard)
 
     def test_bad(self):
         "ensure bad calls raise exceptions"
-        self.assertRaises(KeyError, prepare, ":a :b", {'a': 1})
+        self.assertRaises(KeyError, prepare_inline, ":a :b", {'a': 1})
