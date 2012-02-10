@@ -59,8 +59,8 @@ def randstring(len=8, prefix=""):
     randchars = "".join([choice(chars) for x in range(len)])
     return "%s%s" % (prefix, randchars)
 
-def create_schema(cursor):
-    keyspace = randstring()
+def create_schema(cursor, randstr):
+    keyspace = randstr
 
     # Create (and USE) new keyspace
     cursor.execute("""
@@ -163,23 +163,23 @@ class TestCql(unittest.TestCase):
     def setUp(self):
         dbconn = cql.connect(TEST_HOST, TEST_PORT)
         self.cursor = dbconn.cursor()
-        self.keyspace = create_schema(self.cursor)
+        self.randstr = randstring()
+        self.keyspace = create_schema(self.cursor, self.randstr)
+        self.keyspaces_to_drop = [self.keyspace]
         load_sample(self.cursor)
 
     def tearDown(self):
-        try:
-            self.cursor.execute("DROP KEYSPACE :keyspace",
-                                dict(keyspace=self.keyspace))
-        except:
-            pass
-
         # Cleanup keyspaces created by test-cases
-        for ks in ("AlterTableKS", "CreateCFKeyspace", "Keyspace4CFDrop", \
-                "TestKeyspace42", "TestKeyspace43", "DropIndexTests"):
+        for ks in self.keyspaces_to_drop:
             try:
                 self.cursor.execute("DROP KEYSPACE :ks", dict(ks=ks))
             except:
                 pass
+
+    def make_keyspace_name(self, desc):
+        ksname = self.randstr + desc
+        self.keyspaces_to_drop.append(ksname)
+        return ksname
 
     def get_partitioner(self):
         return thrift_client.describe_partitioner()
@@ -495,24 +495,26 @@ class TestCql(unittest.TestCase):
     def test_create_keyspace(self):
         "create a new keyspace"
         cursor = self.cursor
+        ksname1 = self.make_keyspace_name('TestKeyspace42')
+        ksname2 = self.make_keyspace_name('TestKeyspace43')
         cursor.execute("""
-        CREATE SCHEMA TestKeyspace42 WITH strategy_options:DC1 = '1'
+        CREATE SCHEMA :ks WITH strategy_options:DC1 = '1'
             AND strategy_class = 'NetworkTopologyStrategy'
-        """)
+        """, {'ks': ksname1})
 
         cursor.execute("""
-        CREATE SCHEMA TestKeyspace43 WITH strategy_options:1 = 2 AND strategy_options:2 = 3
+        CREATE SCHEMA :ks WITH strategy_options:1 = 2 AND strategy_options:2 = 3
             AND strategy_class = 'NetworkTopologyStrategy'
-        """)
+        """, {'ks': ksname2})
 
         # TODO: temporary (until this can be done with CQL).
-        ksdef = thrift_client.describe_keyspace("TestKeyspace42")
+        ksdef = thrift_client.describe_keyspace(ksname1)
 
         strategy_class = "org.apache.cassandra.locator.NetworkTopologyStrategy"
         self.assertEqual(ksdef.strategy_class, strategy_class)
         self.assertEqual(ksdef.strategy_options['DC1'], "1")
 
-        ksdef = thrift_client.describe_keyspace("TestKeyspace43")
+        ksdef = thrift_client.describe_keyspace(ksname2)
 
         strategy_class = "org.apache.cassandra.locator.NetworkTopologyStrategy"
         self.assertEqual(ksdef.strategy_class, strategy_class)
@@ -522,30 +524,32 @@ class TestCql(unittest.TestCase):
     def test_drop_keyspace(self):
         "removing a keyspace"
         cursor = self.cursor
+        ksname = self.make_keyspace_name('Keyspace4Drop')
         cursor.execute("""
-               CREATE KEYSPACE Keyspace4Drop WITH strategy_options:replication_factor = '1'
+               CREATE KEYSPACE :ks WITH strategy_options:replication_factor = '1'
                    AND strategy_class = 'SimpleStrategy'
-        """)
+        """, {'ks': ksname})
 
         # TODO: temporary (until this can be done with CQL).
-        thrift_client.describe_keyspace("Keyspace4Drop")
+        thrift_client.describe_keyspace(ksname)
 
-        cursor.execute('DROP SCHEMA Keyspace4Drop;')
+        cursor.execute('DROP SCHEMA :ks;', {'ks': ksname})
 
         # Technically this should throw a ttypes.NotFound(), but this is
         # temporary and so not worth requiring it on PYTHONPATH.
         self.assertRaises(Exception,
                           thrift_client.describe_keyspace,
-                          "Keyspace4Drop")
+                          ksname)
 
     def test_create_column_family(self):
         "create a new column family"
         cursor = self.cursor
+        ksname = self.make_keyspace_name('CreateCFKeyspace')
         cursor.execute("""
-               CREATE SCHEMA CreateCFKeyspace WITH strategy_options:replication_factor = '1'
+               CREATE SCHEMA :ks WITH strategy_options:replication_factor = '1'
                    AND strategy_class = 'SimpleStrategy';
-        """)
-        cursor.execute("USE CreateCFKeyspace;")
+        """, {'ks': ksname})
+        cursor.execute("USE :ks;", {'ks': ksname})
 
         cursor.execute("""
             CREATE COLUMNFAMILY NewCf1 (
@@ -558,7 +562,7 @@ class TestCql(unittest.TestCase):
         """)
 
         # TODO: temporary (until this can be done with CQL).
-        ksdef = thrift_client.describe_keyspace("CreateCFKeyspace")
+        ksdef = thrift_client.describe_keyspace(ksname)
         self.assertEqual(len(ksdef.cf_defs), 1)
         cfam= ksdef.cf_defs[0]
         self.assertEqual(len(cfam.column_metadata), 4)
@@ -582,7 +586,7 @@ class TestCql(unittest.TestCase):
         # No column defs
         cursor.execute("""CREATE COLUMNFAMILY NewCf3
                             (KEY varint PRIMARY KEY) WITH comparator = bigint""")
-        ksdef = thrift_client.describe_keyspace("CreateCFKeyspace")
+        ksdef = thrift_client.describe_keyspace(ksname)
         self.assertEqual(len(ksdef.cf_defs), 2)
         cfam = [i for i in ksdef.cf_defs if i.name == "NewCf3"][0]
         self.assertEqual(cfam.comparator_type, "org.apache.cassandra.db.marshal.LongType")
@@ -591,7 +595,7 @@ class TestCql(unittest.TestCase):
         cursor.execute("""CREATE COLUMNFAMILY NewCf4
                             (KEY varint PRIMARY KEY, 'a' varint, 'b' varint)
                             WITH comparator = text;""")
-        ksdef = thrift_client.describe_keyspace("CreateCFKeyspace")
+        ksdef = thrift_client.describe_keyspace(ksname)
         self.assertEqual(len(ksdef.cf_defs), 3)
         cfam = [i for i in ksdef.cf_defs if i.name == "NewCf4"][0]
         self.assertEqual(len(cfam.column_metadata), 2)
@@ -602,20 +606,21 @@ class TestCql(unittest.TestCase):
     def test_drop_columnfamily(self):
         "removing a column family"
         cursor = self.cursor
+        ksname = self.make_keyspace_name('Keyspace4CFDrop')
         cursor.execute("""
-               CREATE KEYSPACE Keyspace4CFDrop WITH strategy_options:replication_factor = '1'
+               CREATE KEYSPACE :ks WITH strategy_options:replication_factor = '1'
                    AND strategy_class = 'SimpleStrategy';
-        """)
-        cursor.execute('USE Keyspace4CFDrop;')
+        """, {'ks': ksname})
+        cursor.execute('USE :ks;', {'ks': ksname})
         cursor.execute('CREATE COLUMNFAMILY CF4Drop (KEY varint PRIMARY KEY);')
 
         # TODO: temporary (until this can be done with CQL).
-        ksdef = thrift_client.describe_keyspace("Keyspace4CFDrop")
+        ksdef = thrift_client.describe_keyspace(ksname)
         assert len(ksdef.cf_defs), "Column family not created!"
 
         cursor.execute('DROP COLUMNFAMILY CF4Drop;')
 
-        ksdef = thrift_client.describe_keyspace("Keyspace4CFDrop")
+        ksdef = thrift_client.describe_keyspace(ksname)
         assert not len(ksdef.cf_defs), "Column family not deleted!"
 
     def test_create_indexs(self):
@@ -643,13 +648,15 @@ class TestCql(unittest.TestCase):
     def test_drop_indexes(self):
         "droping indexes on columns"
         cursor = self.cursor
-        cursor.execute("""CREATE KEYSPACE DropIndexTests WITH strategy_options:replication_factor = '1'
-                                                            AND strategy_class = 'SimpleStrategy';""")
-        cursor.execute("USE DropIndexTests")
+        ksname = self.make_keyspace_name('DropIndexTests')
+        cursor.execute("""CREATE KEYSPACE :ks WITH strategy_options:replication_factor = '1'
+                                                            AND strategy_class = 'SimpleStrategy';""",
+                       {'ks': ksname})
+        cursor.execute("USE :ks", {'ks': ksname})
         cursor.execute("CREATE COLUMNFAMILY IndexedCF (KEY text PRIMARY KEY, n text)")
         cursor.execute("CREATE INDEX namedIndex ON IndexedCF (n)")
 
-        ksdef = thrift_client.describe_keyspace("DropIndexTests")
+        ksdef = thrift_client.describe_keyspace(ksname)
         columns = ksdef.cf_defs[0].column_metadata
 
         self.assertEqual(columns[0].index_name, "namedIndex")
@@ -658,7 +665,7 @@ class TestCql(unittest.TestCase):
         # testing "DROP INDEX <INDEX_NAME>"
         cursor.execute("DROP INDEX namedIndex")
 
-        ksdef = thrift_client.describe_keyspace("DropIndexTests")
+        ksdef = thrift_client.describe_keyspace(ksname)
         columns = ksdef.cf_defs[0].column_metadata
 
         self.assertEqual(columns[0].index_type, None)
@@ -1198,18 +1205,19 @@ class TestCql(unittest.TestCase):
     def test_alter_table_statement(self):
         "test ALTER statement"
         cursor = self.cursor
+        ksname = self.make_keyspace_name('AlterTableKS')
         cursor.execute("""
-               CREATE KEYSPACE AlterTableKS WITH strategy_options:replication_factor = '1'
+               CREATE KEYSPACE :ks WITH strategy_options:replication_factor = '1'
                    AND strategy_class = 'SimpleStrategy';
-        """)
-        cursor.execute("USE AlterTableKS;")
+        """, {'ks': ksname})
+        cursor.execute("USE :ks;", {'ks': ksname})
 
         cursor.execute("""
             CREATE COLUMNFAMILY NewCf1 (id_key varint PRIMARY KEY) WITH default_validation = ascii;
         """)
 
         # TODO: temporary (until this can be done with CQL).
-        ksdef = thrift_client.describe_keyspace("AlterTableKS")
+        ksdef = thrift_client.describe_keyspace(ksname)
         self.assertEqual(len(ksdef.cf_defs), 1)
         cfam = ksdef.cf_defs[0]
 
@@ -1218,7 +1226,7 @@ class TestCql(unittest.TestCase):
         # testing "add a new column"
         cursor.execute("ALTER COLUMNFAMILY NewCf1 ADD name varchar")
 
-        ksdef = thrift_client.describe_keyspace("AlterTableKS")
+        ksdef = thrift_client.describe_keyspace(ksname)
         self.assertEqual(len(ksdef.cf_defs), 1)
         columns = ksdef.cf_defs[0].column_metadata
 
@@ -1229,7 +1237,7 @@ class TestCql(unittest.TestCase):
         # testing "alter a column type"
         cursor.execute("ALTER COLUMNFAMILY NewCf1 ALTER name TYPE ascii")
 
-        ksdef = thrift_client.describe_keyspace("AlterTableKS")
+        ksdef = thrift_client.describe_keyspace(ksname)
         self.assertEqual(len(ksdef.cf_defs), 1)
         columns = ksdef.cf_defs[0].column_metadata
 
@@ -1245,7 +1253,7 @@ class TestCql(unittest.TestCase):
         # testing 'drop an existing column'
         cursor.execute("ALTER COLUMNFAMILY NewCf1 DROP name")
 
-        ksdef = thrift_client.describe_keyspace("AlterTableKS")
+        ksdef = thrift_client.describe_keyspace(ksname)
         self.assertEqual(len(ksdef.cf_defs), 1)
         columns = ksdef.cf_defs[0].column_metadata
 
@@ -1330,7 +1338,7 @@ class TestCql(unittest.TestCase):
         # can't mix counter and normal statements
         self.assertRaises(cql.ProgrammingError,
                           cursor.execute,
-                          "UPDATE CounterCF SET count_me = count_me + 2, x = 'a' WHERE key = 'counter1'")
+                          "UPDATE CounterCF SET count_me = count_me + 2, x = 'aa' WHERE key = 'counter1'")
 
         # column names must match
         self.assertRaises(cql.ProgrammingError,
@@ -1345,12 +1353,13 @@ class TestCql(unittest.TestCase):
     def test_key_alias_support(self):
         "should be possible to use alias instead of KEY keyword"
         cursor = self.cursor
+        ksname = self.make_keyspace_name('KeyAliasKeyspace')
 
         cursor.execute("""
-               CREATE SCHEMA KeyAliasKeyspace WITH strategy_options:replication_factor = '1'
+               CREATE SCHEMA :ks WITH strategy_options:replication_factor = '1'
                    AND strategy_class = 'SimpleStrategy';
-        """)
-        cursor.execute("USE KeyAliasKeyspace;")
+        """, {'ks': ksname})
+        cursor.execute("USE :ks;", {'ks': ksname})
 
         # create a Column Family with key alias
         cursor.execute("""
@@ -1361,7 +1370,7 @@ class TestCql(unittest.TestCase):
         """)
 
         # TODO: temporary (until this can be done with CQL).
-        ksdef = thrift_client.describe_keyspace("KeyAliasKeyspace")
+        ksdef = thrift_client.describe_keyspace(ksname)
         cfdef = ksdef.cf_defs[0]
 
         self.assertEqual(len(ksdef.cf_defs), 1)
@@ -1425,8 +1434,8 @@ class TestCql(unittest.TestCase):
                           cursor.execute,
                           "SELECT * FROM KeyAliasCF WHERE KEY IN (1, 2)")
 
-        cursor.execute("USE " + self.keyspace)
-        cursor.execute("DROP KEYSPACE KeyAliasKeyspace")
+        cursor.execute("USE :ks", {'ks': self.keyspace})
+        cursor.execute("DROP KEYSPACE :ks", {'ks': ksname})
 
     def test_key_in_projection_semantics(self):
         "selecting on key always returns at least one result"
