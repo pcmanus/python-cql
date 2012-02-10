@@ -344,3 +344,6 @@ def encode_bigint(big):
 def __escape_quotes(term):
     assert isinstance(term, basestring)
     return term.replace("'", "''")
+
+def cql_marshal(val, typ):
+    return marshallers[typ](val)

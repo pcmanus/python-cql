@@ -115,7 +115,7 @@ class Cursor:
         self.pre_execution_setup()
 
         doquery = self._connection.client.execute_prepared_cql_query
-        paramvals = prepared_query.encode_params()
+        paramvals = prepared_query.encode_params(params)
         response = self.handle_cql_execution_errors(doquery, prepared_query.itemid, paramvals)
 
         return self.process_execution_results(response, decoder=decoder)
