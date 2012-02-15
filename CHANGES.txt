@@ -1,3 +1,9 @@
+1.0.9 - 2012/02/15
+ * allow for user-definable behavior on decode errors
+ * support for prepared statements
+ * add marshalling capability
+ * Add CQL version support (and thrift files recompile for thrift 7)
+
 1.0.8 - 2012/01/24
  * Fix handling of comment-like markers inside CQL string literals
    (since comments must be stripped out to achieve proper recognition
