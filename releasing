@@ -25,7 +25,7 @@ in master,
 
 ------ POINT OF NO RETURN ------
 
- * `$ git push origin refs/tags/${version}`
+ * `$ git push origin master refs/tags/${version}`
  * `$ python setup.py sdist upload -s`
 
  * go to http://code.google.com/a/apache-extras.org/p/cassandra-dbapi2/downloads/list, choose "New download"
@@ -51,7 +51,7 @@ debian release
   git archive --format=tar --prefix="cassandra-dbapi2-${version}/" "refs/tags/${version}" | gzip -c -9 > "../python-cql_${version}.orig.tar.gz"
   pristine-tar commit "../python-cql_${version}.orig.tar.gz" "refs/tags/${version}"
 
-  git-buildpackage -us -uc --git-dist=lenny
+  git-buildpackage -us -uc --git-dist=squeeze
   sudo debi    # test that package install, uninstall work right
   dcmd scp ../python-cql_${version}-1_amd64.changes ${webserverhost}:
   git push origin debian refs/tags/debian/${version}-1
