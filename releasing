@@ -74,3 +74,13 @@ redhat release
   # test installing/upgrading/uninstalling new rpm at ~/rpmbuild/RPMS/noarch/python26-cql-${version}-1.noarch.rpm
   scp $HOME/rpmbuild/RPMS/noarch/python26-cql-${version}-1.noarch.rpm ${webserverhost}:
   git push origin redhat refs/tags/redhat/${version}-1
+
+--------------------------------------------------------
+updating bundled internal-only cql lib in cassandra tree
+--------------------------------------------------------
+
+::
+
+  python setup.py sdist --formats=zip
+  cp dist/"cql-${version}.zip" path/to/cassandra/lib/"cql-internal-only-${version}.zip"
+  remove old versions if appropriate
