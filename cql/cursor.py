@@ -155,7 +155,7 @@ class Cursor:
             self.rowcount = 0
             self.description = _VOID_DESCRIPTION
         else:
-            raise Exception('unknown result type ' + response.type)
+            raise Exception('unknown result type %s' % response.type)
 
         # 'Return values are not defined.'
         return True
