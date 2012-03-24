@@ -50,24 +50,6 @@ except ImportError:
         def __init__(self, bytes):
             self.bytes = bytes
 
-_param_re = re.compile(r"""
-    (                           # stuff that is not substitution markers
-      (?:  ' [^']* '            # string literal; ignore colons in here
-        |  [^']                 # eat anything else
-      )*?
-    )
-    (?<! [a-zA-Z0-9_'] )        # no colons immediately preceded by an ident or str literal
-    :
-    ( [a-zA-Z_][a-zA-Z0-9_]* )  # the param name
-""", re.S | re.X)
-
-_comment_re = re.compile(r"""
-       // .*? $
-    |  -- .*? $
-    |  /\* .*? \*/
-    | ' [^']* '
-""", re.S | re.M | re.X)
-
 BYTES_TYPE = "org.apache.cassandra.db.marshal.BytesType"
 ASCII_TYPE = "org.apache.cassandra.db.marshal.AsciiType"
 BOOLEAN_TYPE = "org.apache.cassandra.db.marshal.BooleanType"
@@ -84,6 +66,34 @@ LEXICAL_UUID_TYPE = "org.apache.cassandra.db.marshal.LexicalType"
 TIME_UUID_TYPE = "org.apache.cassandra.db.marshal.TimeUUIDType"
 COUNTER_COLUMN_TYPE = "org.apache.cassandra.db.marshal.CounterColumnType"
 
+stringlit_re = re.compile(r"""('[^']*'|"[^"]*")""")
+comments_re = re.compile(r'(/\*(?:[^*]|\*[^/])*\*/|//.*$|--.*$)', re.MULTILINE)
+param_re = re.compile(r'''
+    ( [^a-z0-9_] )    # don't match : at the beginning of the text (meaning it
+                      # immediately follows a comment or string literal) or
+                      # right after an identifier character
+    : ( [a-z0-9_]+ )
+    ( [^a-z0-9_] )    # and don't match a param that is immediately followed by
+                      # a comment or string literal either
+''', re.IGNORECASE | re.VERBOSE)
+
+def replace_param_substitutions(query, replacer):
+    split_strings = stringlit_re.split(' ' + query + ' ')
+    split_str_and_cmt = []
+    for p in split_strings:
+        if p[:1] in '\'"':
+            split_str_and_cmt.append(p)
+        else:
+            split_str_and_cmt.extend(comments_re.split(p))
+    output = []
+    for p in split_str_and_cmt:
+        if p[:1] in '\'"' or p[:2] in ('--', '//', '/*'):
+            output.append(p)
+        else:
+            output.append(param_re.sub(replacer, p))
+    assert output[0][0] == ' ' and output[-1][-1] == ' '
+    return ''.join(output)[1:-1]
+
 class PreparedQuery(object):
     def __init__(self, querytext, itemid, vartypes, paramnames):
         self.querytext = querytext
@@ -97,14 +107,6 @@ class PreparedQuery(object):
     def encode_params(self, params):
         return [cql_marshal(params[n], t) for (n, t) in zip(self.paramnames, self.vartypes)]
 
-def blank_comments(query):
-    def teh_blanker(match):
-        m = match.group(0)
-        if m.startswith("'"):
-            return m
-        return ' ' * len(m)
-    return _comment_re.sub(teh_blanker, query)
-
 def prepare_inline(query, params):
     """
     For every match of the form ":param_name", call cql_quote
@@ -112,21 +114,19 @@ def prepare_inline(query, params):
     with the result
     """
 
-    # kill comments first, so that we don't have to try to parse around them.
-    # but keep the character count the same, so that location-tagged error
-    # messages still work
-    query = blank_comments(query)
-    return _param_re.sub(lambda m: m.group(1) + cql_quote(params[m.group(2)]), query)
+    def param_replacer(match):
+        return match.group(1) + cql_quote(params[match.group(2)]) + match.group(3)
+    return replace_param_substitutions(query, param_replacer)
 
 def prepare_query(querytext):
-    querytext = blank_comments(querytext)
     paramnames = []
     def found_param(match):
         pre_param_text = match.group(1)
         paramname = match.group(2)
+        post_param_text = match.group(3)
         paramnames.append(paramname)
-        return pre_param_text + '?'
-    transformed_query = _param_re.sub(found_param, querytext)
+        return pre_param_text + '?' + post_param_text
+    transformed_query = replace_param_substitutions(querytext, found_param)
     return transformed_query, paramnames
 
 
