@@ -37,11 +37,19 @@ class TestPreparedQueries(unittest.TestCase):
     dbconn = None
 
     def setUp(self):
-        self.dbconn = cql.connect(TEST_HOST, TEST_PORT, cql_version=TEST_CQL_VERSION)
+        try:
+            self.dbconn = cql.connect(TEST_HOST, TEST_PORT, cql_version=TEST_CQL_VERSION)
+        except cql.cursor.TApplicationException:
+            # set_cql_version (and thus, cql3) not supported; skip all of these
+            self.cursor = None
+            return
+
         self.cursor = self.dbconn.cursor()
         self.keyspace = self.create_schema()
 
     def tearDown(self):
+        if self.cursor is None:
+            return
         try:
             self.cursor.execute("drop keyspace %s" % self.keyspace)
         except:
@@ -71,6 +79,9 @@ class TestPreparedQueries(unittest.TestCase):
         return ksname
 
     def test_prepared_select(self):
+        if self.cursor is None:
+            return
+
         q = self.cursor.prepare_query("select thekey, thedecimal, theblob from abc where thekey=:key")
 
         self.cursor.execute_prepared(q, {'key': '1999-12-31+0000'})
@@ -82,6 +93,9 @@ class TestPreparedQueries(unittest.TestCase):
         self.assertEqual(results[2], '\x00\xff\x80\x08')
 
     def test_prepared_insert(self):
+        if self.cursor is None:
+            return
+
         q = self.cursor.prepare_query("insert into abc (thekey, theint) values (:key, :ival)")
 
         self.cursor.execute_prepared(q, {'key': '1991-10-05+0000', 'ival': 2})
@@ -95,6 +109,9 @@ class TestPreparedQueries(unittest.TestCase):
         self.assertEqual(results[1], -200000)
 
     def test_prepared_update(self):
+        if self.cursor is None:
+            return
+
         q = self.cursor.prepare_query("update abc set theblob=:myblob where thekey = :mykey")
 
         self.cursor.execute_prepared(q, {'mykey': '2305-07-13+0000', 'myblob': '\0foo\0'})
@@ -108,6 +125,9 @@ class TestPreparedQueries(unittest.TestCase):
         self.assertEqual(results[1], '')
 
     def test_prepared_increment(self):
+        if self.cursor is None:
+            return
+
         q = self.cursor.prepare_query("update counterito set feet=feet + :inc where id = :id and name = 'krang'")
 
         self.cursor.execute_prepared(q, {'inc': 12, 'id': 1})
@@ -121,6 +141,9 @@ class TestPreparedQueries(unittest.TestCase):
         self.assertEqual(results[1], 8)
 
     def test_prepared_decrement(self):
+        if self.cursor is None:
+            return
+
         q = self.cursor.prepare_query("update counterito set feet=feet - :inc where id = :id and name = 'krang'")
 
         self.cursor.execute_prepared(q, {'inc': -100, 'id': 2})
