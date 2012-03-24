@@ -76,7 +76,7 @@ CREATE COLUMNFAMILY blah WITH somearg:another='abc''' AND foo='bar':baz AND opti
 ':suffix;
 """,
 """
-SELECT ' '..':hi' FROM ColumnFamily WHERE KEY=':dontsubstthis' AND col >                    0.2;
+SELECT ' '..':hi' FROM ColumnFamily WHERE KEY=':dontsubstthis' AND col > /* ignore :this */ 0.2;
 """,
 """
 USE 'abc';

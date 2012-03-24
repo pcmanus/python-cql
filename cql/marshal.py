@@ -69,11 +69,11 @@ COUNTER_COLUMN_TYPE = "org.apache.cassandra.db.marshal.CounterColumnType"
 stringlit_re = re.compile(r"""('[^']*'|"[^"]*")""")
 comments_re = re.compile(r'(/\*(?:[^*]|\*[^/])*\*/|//.*$|--.*$)', re.MULTILINE)
 param_re = re.compile(r'''
-    ( [^a-z0-9_] )    # don't match : at the beginning of the text (meaning it
+    ( \W )            # don't match : at the beginning of the text (meaning it
                       # immediately follows a comment or string literal) or
                       # right after an identifier character
-    : ( [a-z0-9_]+ )
-    ( [^a-z0-9_] )    # and don't match a param that is immediately followed by
+    : ( \w+ )
+    (?= \W )          # and don't match a param that is immediately followed by
                       # a comment or string literal either
 ''', re.IGNORECASE | re.VERBOSE)
 
@@ -115,7 +115,7 @@ def prepare_inline(query, params):
     """
 
     def param_replacer(match):
-        return match.group(1) + cql_quote(params[match.group(2)]) + match.group(3)
+        return match.group(1) + cql_quote(params[match.group(2)])
     return replace_param_substitutions(query, param_replacer)
 
 def prepare_query(querytext):
@@ -123,9 +123,8 @@ def prepare_query(querytext):
     def found_param(match):
         pre_param_text = match.group(1)
         paramname = match.group(2)
-        post_param_text = match.group(3)
         paramnames.append(paramname)
-        return pre_param_text + '?' + post_param_text
+        return pre_param_text + '?'
     transformed_query = replace_param_substitutions(querytext, found_param)
     return transformed_query, paramnames
 
