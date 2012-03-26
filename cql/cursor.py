@@ -22,8 +22,8 @@ import cql
 from cql.marshal import prepare_inline, prepare_query, PreparedQuery
 from cql.decoders import SchemaDecoder
 from cql.cassandra.ttypes import (
-    Compression, 
-    CqlResultType, 
+    Compression,
+    CqlResultType,
     InvalidRequestException,
     UnavailableException,
     TimedOutException,
@@ -43,15 +43,21 @@ class Cursor:
     _ddl_re = re.compile("\s*(CREATE|ALTER|DROP)\s+",
                          re.IGNORECASE | re.MULTILINE)
     supports_prepared_queries = False
+    supports_name_info = True
 
     def __init__(self, parent_connection):
         self.open_socket = True
         self._connection = parent_connection
 
-        self.description = None # A list of 7-tuples: 
-                                #  (column_name, type_code, none, none,
-                                #   none, none, nulls_ok=True)
-                                # Populate on execute()
+        # A list of 7-tuples corresponding to the column metadata for the
+        # current row (populated on execute() and on fetchone()):
+        #  (column_name, type_code, None, None, None, None, nulls_ok=True)
+        self.description = None
+
+        # A list of 2-tuples (name_bytes, type_code), corresponding to the
+        # raw bytes of the column names for each column in the current row,
+        # in order, and the types under which they can be deserialized
+        self.name_info = None
 
         self.arraysize = 1
         self.rowcount = -1      # Populate on execute()
@@ -101,6 +107,7 @@ class Cursor:
         self.rs_idx = 0
         self.rowcount = 0
         self.description = None
+        self.name_info = None
 
     def execute(self, cql_query, params={}, decoder=None):
         self.pre_execution_setup()
@@ -142,18 +149,20 @@ class Cursor:
             self.rs_idx = 0
             self.rowcount = len(self.result)
             if self.result:
-                self.description = self.decoder.decode_description(self.result[0])
+                self.description, self.name_info = self.decoder.decode_metadata(self.result[0])
         elif response.type == CqlResultType.INT:
             self.result = [(response.num,)]
             self.rs_idx = 0
             self.rowcount = 1
             # TODO: name could be the COUNT expression
             self.description = _COUNT_DESCRIPTION
+            self.name_info = None
         elif response.type == CqlResultType.VOID:
             self.result = []
             self.rs_idx = 0
             self.rowcount = 0
             self.description = _VOID_DESCRIPTION
+            self.name_info = ()
         else:
             raise Exception('unknown result type %s' % response.type)
 
@@ -180,17 +189,17 @@ class Cursor:
 
         row = self.result[self.rs_idx]
         self.rs_idx += 1
-        if self.description == _COUNT_DESCRIPTION:
+        if self.description is _COUNT_DESCRIPTION:
             return row
         else:
-            self.description = self.decoder.decode_description(row)
+            self.description, self.name_info = self.decoder.decode_metadata(row)
             return self.decoder.decode_row(row)
 
     def fetchmany(self, size=None):
         self.__checksock()
         if size is None:
             size = self.arraysize
-        # we avoid leveraging fetchone here to avoid calling decode_description unnecessarily
+        # we avoid leveraging fetchone here to avoid calling decode_metadata unnecessarily
         L = []
         while len(L) < size and self.rs_idx < len(self.result):
             row = self.result[self.rs_idx]
@@ -204,7 +213,7 @@ class Cursor:
     ###
     # extra, for cqlsh
     ###
-    
+
     def _reset(self):
         self.rs_idx = 0
 

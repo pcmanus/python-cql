@@ -34,8 +34,12 @@ class SchemaDecoder(object):
                                    % (valuebytes, namebytes, expectedtype, err))
 
     def decode_description(self, row):
+        return self.decode_metadata(row)[0]
+
+    def decode_metadata(self, row):
         schema = self.schema
         description = []
+        name_info = []
         for column in row.columns:
             namebytes = column.name
             comparator = schema.name_types.get(namebytes, schema.default_name_type)
@@ -46,8 +50,9 @@ class SchemaDecoder(object):
             except Exception, e:
                 name = self.name_decode_error(e, namebytes, validator)
             description.append((name, validator, None, None, None, None, True))
+            name_info.append((namebytes, comparator))
 
-        return description
+        return description, name_info
 
     def decode_row(self, row):
         schema = self.schema
