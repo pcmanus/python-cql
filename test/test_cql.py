@@ -675,6 +675,19 @@ class TestCql(unittest.TestCase):
                           cursor.execute,
                           "DROP INDEX undefIndex")
 
+    def test_name_info(self):
+        cursor = self.cursor
+        timeuuid = uuid.uuid1()
+        cursor.execute("""
+            UPDATE StandardTimeUUID SET '%s' = 19 WHERE KEY = 'uuidtest'
+        """ % str(timeuuid))
+        cursor.execute("""
+            SELECT KEY, '%s' FROM StandardTimeUUID WHERE KEY = 'uuidtest'
+        """ % str(timeuuid))
+        self.assertEqual(len(cursor.name_info), 2)
+        self.assertEqual(cursor.name_info[0], ('KEY', 'AsciiType'))
+        self.assertEqual(cursor.name_info[1], (timeuuid.bytes, 'UUIDType'))
+
     def test_time_uuid(self):
         "store and retrieve time-based (type 1) uuids"
         cursor = self.cursor
