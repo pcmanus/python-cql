@@ -92,6 +92,18 @@ class TestPreparedQueries(unittest.TestCase):
         results = self.cursor.fetchone()
         self.assertEqual(results[2], '\x00\xff\x80\x08')
 
+    def test_prepared_select_no_terms(self):
+        if self.cursor is None:
+            return
+
+        q = self.cursor.prepare_query("select thekey, thedecimal, theblob from abc")
+
+        self.cursor.execute_prepared(q, {})
+        results = self.cursor.fetchall()
+        floats = set(row[1] for row in results)
+
+        self.assertEqual(set([None, decimal.Decimal('-14.400')]), floats)
+
     def test_prepared_insert(self):
         if self.cursor is None:
             return
