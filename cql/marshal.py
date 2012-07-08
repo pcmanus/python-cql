@@ -132,8 +132,8 @@ def prepare_query(querytext):
 def cql_quote(term):
     if isinstance(term, unicode):
         return "'%s'" % __escape_quotes(term.encode('utf8'))
-    elif isinstance(term, str):
-        return "'%s'" % __escape_quotes(term)
+    elif isinstance(term, (str, bool)):
+        return "'%s'" % __escape_quotes(str(term))
     else:
         return str(term)
 
