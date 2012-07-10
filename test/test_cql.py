@@ -1471,3 +1471,6 @@ class TestCql(unittest.TestCase):
         cursor.execute("TRUNCATE StandardString1")
         cursor.execute("SELECT * FROM StandardString1")
         assert cursor.rowcount == 0, "expected zero results, got %d" % cursor.rowcount
+
+    def test_reject_unicode(self):
+        self.assertRaises(ValueError, self.cursor.execute, u'select * from system.schema_keyspaces')

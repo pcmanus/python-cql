@@ -92,6 +92,8 @@ class Cursor:
         return self.compress_query_text(prepared_q_text)
 
     def prepare_query(self, query, paramtypes=None):
+        if isinstance(query, unicode):
+            raise ValueError("CQL query must be bytes, not unicode")
         prepared_q_text, paramnames = prepare_query(query)
         compressed_q, compression = self.compress_query_text(prepared_q_text)
         presult = self._connection.client.prepare_cql_query(compressed_q, compression)
@@ -110,6 +112,8 @@ class Cursor:
         self.name_info = None
 
     def execute(self, cql_query, params={}, decoder=None):
+        if isinstance(cql_query, unicode):
+            raise ValueError("CQL query must be bytes, not unicode")
         self.pre_execution_setup()
 
         prepared_q, compress = self.prepare_inline(cql_query, params)

@@ -167,3 +167,9 @@ class TestPreparedQueries(unittest.TestCase):
         self.cursor.execute("select id, feet from counterito where id=2 and name = 'krang'")
         results = self.cursor.fetchone()
         self.assertEqual(results[1], 1)
+
+    def test_reject_unicode(self):
+        if self.cursor is None:
+            return
+
+        self.assertRaises(ValueError, self.cursor.prepare_query, u'select * from system.schema_keyspaces')
