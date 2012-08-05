@@ -64,6 +64,9 @@ DOUBLE_TYPE = "org.apache.cassandra.db.marshal.DoubleType"
 UUID_TYPE = "org.apache.cassandra.db.marshal.UUIDType"
 LEXICAL_UUID_TYPE = "org.apache.cassandra.db.marshal.LexicalType"
 TIME_UUID_TYPE = "org.apache.cassandra.db.marshal.TimeUUIDType"
+LIST_TYPE = "org.apache.cassandra.db.marshal.ListType"
+MAP_TYPE = "org.apache.cassandra.db.marshal.MapType"
+SET_TYPE = "org.apache.cassandra.db.marshal.SetType"
 COUNTER_COLUMN_TYPE = "org.apache.cassandra.db.marshal.CounterColumnType"
 
 stringlit_re = re.compile(r"""('[^']*'|"[^"]*")""")
@@ -299,6 +302,13 @@ def marshal_uuid(uuid):
         return ''
     return uuid.bytes
 
+def unmarshal_json(j):
+    if j is None:
+        return None
+    return json.loads(j)
+
+unmarshal_list = unmarshal_map = unmarshal_set = unmarshal_json
+
 unmarshallers = {BYTES_TYPE:          unmarshal_noop,
                  ASCII_TYPE:          unmarshal_noop,
                  BOOLEAN_TYPE:        unmarshal_bool,
@@ -313,6 +323,9 @@ unmarshallers = {BYTES_TYPE:          unmarshal_noop,
                  UUID_TYPE:           unmarshal_uuid,
                  LEXICAL_UUID_TYPE:   unmarshal_uuid,
                  TIME_UUID_TYPE:      unmarshal_uuid,
+                 LIST_TYPE:           unmarshal_list,
+                 MAP_TYPE:            unmarshal_map,
+                 SET_TYPE:            unmarshal_set,
                  COUNTER_COLUMN_TYPE: unmarshal_long}
 for name, typ in unmarshallers.items():
     short_name = name.split('.')[-1]
