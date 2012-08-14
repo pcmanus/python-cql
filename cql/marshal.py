@@ -39,14 +39,27 @@ cql_time_formats = (
     '%Y-%m-%d'
 )
 
-if hasattr(struct, 'Struct'): # new in Python 2.5
-   _have_struct = True
-   _long_packer = struct.Struct('>q')
-   _int32_packer = struct.Struct('>i')
-   _float_packer = struct.Struct('>f')
-   _double_packer = struct.Struct('>d')
-else:
-    _have_struct = False
+def _make_packer(format_string):
+    try:
+        packer = struct.Struct(format_string) # new in Python 2.5
+    except AttributeError:
+        pack = lambda x: struct.pack(format_string, x)
+        unpack = lambda s: struct.unpack(format_string, s)
+    else:
+        pack = packer.pack
+        unpack = lambda s: packer.unpack(s)[0]
+    return pack, unpack
+
+int64_pack, int64_unpack = _make_packer('>q')
+int32_pack, int32_unpack = _make_packer('>i')
+int16_pack, int16_unpack = _make_packer('>h')
+int8_pack, int8_unpack = _make_packer('>b')
+uint64_pack, uint64_unpack = _make_packer('>Q')
+uint32_pack, uint32_unpack = _make_packer('>I')
+uint16_pack, uint16_unpack = _make_packer('>H')
+uint8_pack, uint8_unpack = _make_packer('>B')
+float_pack, float_unpack = _make_packer('>f')
+double_pack, double_unpack = _make_packer('>d')
 
 try:
     from uuid import UUID  # new in Python 2.5
@@ -153,12 +166,12 @@ marshal_noop = unmarshal_noop
 def unmarshal_bool(bytestr):
     if not bytestr:
         return None
-    return bool(ord(bytestr[0]))
+    return bool(int8_unpack(bytestr))
 
 def marshal_bool(truth):
     if truth is None:
         return ''
-    return chr(bool(truth))
+    return int8_pack(bool(truth))
 
 def unmarshal_utf8(bytestr):
     return bytestr.decode("utf8")
@@ -168,24 +181,15 @@ def marshal_utf8(ustr):
         return ''
     return ustr.encode('utf8')
 
-if _have_struct:
-    def unmarshal_int32(bytestr):
-        if not bytestr:
-            return None
-        return _int32_packer.unpack(bytestr)[0]
-    def marshal_int32(i):
-        if i is None:
-            return ''
-        return _int32_packer.pack(i)
-else:
-    def unmarshal_int32(bytestr):
-        if not bytestr:
-            return None
-        return struct.unpack(">i", bytestr)[0]
-    def marshal_int32(i):
-        if i is None:
-            return ''
-        return struct.pack('>i', i)
+def unmarshal_int32(bytestr):
+    if not bytestr:
+        return None
+    return int32_unpack(bytestr)
+
+def marshal_int32(i):
+    if i is None:
+        return ''
+    return int32_pack(i)
 
 def unmarshal_int(bytestr):
     if not bytestr:
@@ -197,62 +201,35 @@ def marshal_int(bigint):
         return ''
     return encode_bigint(bigint)
 
-if _have_struct:
-    def unmarshal_long(bytestr):
-        if not bytestr:
-            return None
-        return _long_packer.unpack(bytestr)[0]
-    def marshal_long(longint):
-        if longint is None:
-            return ''
-        return _long_packer.pack(longint)
-else:
-    def unmarshal_long(bytestr):
-        if not bytestr:
-            return None
-        return struct.unpack(">q", bytestr)[0]
-    def marshal_long(longint):
-        if longint is None:
-            return ''
-        return struct.pack(">q", longint)
+def unmarshal_long(bytestr):
+    if not bytestr:
+        return None
+    return int64_unpack(bytestr)
 
-if _have_struct:
-    def unmarshal_float(bytestr):
-        if not bytestr:
-            return None
-        return _float_packer.unpack(bytestr)[0]
-    def marshal_float(f):
-        if f is None:
-            return ''
-        return _float_packer.pack(f)
-else:
-    def unmarshal_float(bytestr):
-        if not bytestr:
-            return None
-        return struct.unpack(">f", bytestr)[0]
-    def marshal_float(f):
-        if f is None:
-            return ''
-        return struct.pack('>f', f)
+def marshal_long(longint):
+    if longint is None:
+        return ''
+    return int64_pack(longint)
 
-if _have_struct:
-    def unmarshal_double(bytestr):
-        if not bytestr:
-            return None
-        return _double_packer.unpack(bytestr)[0]
-    def marshal_double(d):
-        if d is None:
-            return ''
-        return _double_packer.pack(d)
-else:
-    def unmarshal_double(bytestr):
-        if not bytestr:
-            return None
-        return struct.unpack(">d", bytestr)[0]
-    def marshal_double(d):
-        if d is None:
-            return ''
-        return struct.pack('>d', d)
+def unmarshal_float(bytestr):
+    if not bytestr:
+        return None
+    return float_unpack(bytestr)
+
+def marshal_float(f):
+    if f is None:
+        return ''
+    return float_pack(f)
+
+def unmarshal_double(bytestr):
+    if not bytestr:
+        return None
+    return double_unpack(bytestr)
+
+def marshal_double(d):
+    if d is None:
+        return ''
+    return double_pack(d)
 
 def unmarshal_date(bytestr):
     if not bytestr:
