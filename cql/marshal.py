@@ -21,6 +21,11 @@ import time
 import calendar
 from decimal import Decimal
 
+try:
+    import json
+except ImportError:
+    import simplejson as json
+
 import cql
 
 __all__ = ['prepare_inline', 'prepare_query', 'cql_quote', 'unmarshal_noop', 'unmarshallers',
