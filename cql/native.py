@@ -15,6 +15,7 @@
 # limitations under the License.
 
 from marshal import int32_pack, int32_unpack, uint16_pack, uint16_unpack
+from cqltypes import lookup_casstype
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -305,20 +306,15 @@ class ResultMessage(_MessageType):
     def read_type(cls, f):
         # XXX: stubbed out. should really return more useful 'type' objects.
         optid = read_short(f)
-        cqltypename = cls.type_codes.get(optid)
-        if cqltypename is None:
-            cqltypename = "'%s'" % read_string(f)
-        elif cqltypename == 'list':
+        cqltype = lookup_cqltype(cls.type_codes.get(optid))
+        if cqltypename in ('list', 'set'):
             subtype = cls.read_type(f)
-            cqltypename = 'list<%s>' % subtype
+            cqltype = cqltype.apply_parameters(subtype)
         elif cqltypename == 'map':
             keysubtype = cls.read_type(f)
             valsubtype = cls.read_type(f)
-            cqltypename = 'map<%s,%s>' % (keysubtype, valsubtype)
-        elif cqltypename == 'set':
-            subtype = cls.read_type(f)
-            cqltypename = 'set<%s>' % subtype
-        return cqltypename
+            cqltype = cqltype.apply_parameters(keysubtype, valsubtype)
+        return cqltype
 
     @staticmethod
     def recv_row(f, colcount):
@@ -415,15 +411,3 @@ def write_value(f, v):
 #def write_option(f, optid, value):
 #    write_short(f, optid)
 #    write_value(f, value)
-
-# XXX: this belongs in the marshal module. here for testing
-def read_map(f):
-    numelements = read_short(f)
-    themap = []
-    for n in xrange(numelements):
-        sk = read_short(f)
-        k = f.read(sk)
-        sv = read_short(f)
-        v = f.read(sv)
-        themap.append((k, v))
-    return themap

@@ -16,27 +16,10 @@
 
 import re
 import struct
-import time
-import calendar
-from decimal import Decimal
-
-try:
-    import json
-except ImportError:
-    import simplejson as json
-
 import cql
 
-__all__ = ['prepare_inline', 'prepare_query', 'cql_quote', 'unmarshal_noop', 'unmarshallers',
+__all__ = ['prepare_inline', 'prepare_query', 'cql_quote',
            'cql_marshal', 'PreparedQuery']
-
-cql_time_formats = (
-    '%Y-%m-%d %H:%M',
-    '%Y-%m-%d %H:%M:%S',
-    '%Y-%m-%dT%H:%M',
-    '%Y-%m-%dT%H:%M:%S',
-    '%Y-%m-%d'
-)
 
 def _make_packer(format_string):
     try:
@@ -59,32 +42,6 @@ uint16_pack, uint16_unpack = _make_packer('>H')
 uint8_pack, uint8_unpack = _make_packer('>B')
 float_pack, float_unpack = _make_packer('>f')
 double_pack, double_unpack = _make_packer('>d')
-
-try:
-    from uuid import UUID  # new in Python 2.5
-except ImportError:
-    class UUID:
-        def __init__(self, bytes):
-            self.bytes = bytes
-
-BYTES_TYPE = "org.apache.cassandra.db.marshal.BytesType"
-ASCII_TYPE = "org.apache.cassandra.db.marshal.AsciiType"
-BOOLEAN_TYPE = "org.apache.cassandra.db.marshal.BooleanType"
-DATE_TYPE = "org.apache.cassandra.db.marshal.DateType"
-DECIMAL_TYPE = "org.apache.cassandra.db.marshal.DecimalType"
-UTF8_TYPE = "org.apache.cassandra.db.marshal.UTF8Type"
-INT32_TYPE = "org.apache.cassandra.db.marshal.Int32Type"
-INTEGER_TYPE = "org.apache.cassandra.db.marshal.IntegerType"
-LONG_TYPE = "org.apache.cassandra.db.marshal.LongType"
-FLOAT_TYPE = "org.apache.cassandra.db.marshal.FloatType"
-DOUBLE_TYPE = "org.apache.cassandra.db.marshal.DoubleType"
-UUID_TYPE = "org.apache.cassandra.db.marshal.UUIDType"
-LEXICAL_UUID_TYPE = "org.apache.cassandra.db.marshal.LexicalType"
-TIME_UUID_TYPE = "org.apache.cassandra.db.marshal.TimeUUIDType"
-LIST_TYPE = "org.apache.cassandra.db.marshal.ListType"
-MAP_TYPE = "org.apache.cassandra.db.marshal.MapType"
-SET_TYPE = "org.apache.cassandra.db.marshal.SetType"
-COUNTER_COLUMN_TYPE = "org.apache.cassandra.db.marshal.CounterColumnType"
 
 stringlit_re = re.compile(r"""('[^']*'|"[^"]*")""")
 comments_re = re.compile(r'(/\*(?:[^*]|\*[^/])*\*/|//.*$|--.*$)', re.MULTILINE)
@@ -148,7 +105,6 @@ def prepare_query(querytext):
     transformed_query = replace_param_substitutions(querytext, found_param)
     return transformed_query, paramnames
 
-
 def cql_quote(term):
     if isinstance(term, unicode):
         return "'%s'" % __escape_quotes(term.encode('utf8'))
@@ -157,181 +113,7 @@ def cql_quote(term):
     else:
         return str(term)
 
-def unmarshal_noop(bytestr):
-    return bytestr
-
-marshal_noop = unmarshal_noop
-
-def unmarshal_bool(bytestr):
-    if not bytestr:
-        return None
-    return bool(int8_unpack(bytestr))
-
-def marshal_bool(truth):
-    if truth is None:
-        return ''
-    return int8_pack(bool(truth))
-
-def unmarshal_utf8(bytestr):
-    return bytestr.decode("utf8")
-
-def marshal_utf8(ustr):
-    if ustr is None:
-        return ''
-    return ustr.encode('utf8')
-
-def unmarshal_int32(bytestr):
-    if not bytestr:
-        return None
-    return int32_unpack(bytestr)
-
-def marshal_int32(i):
-    if i is None:
-        return ''
-    return int32_pack(i)
-
-def unmarshal_int(bytestr):
-    if not bytestr:
-        return None
-    return decode_bigint(bytestr)
-
-def marshal_int(bigint):
-    if bigint is None:
-        return ''
-    return encode_bigint(bigint)
-
-def unmarshal_long(bytestr):
-    if not bytestr:
-        return None
-    return int64_unpack(bytestr)
-
-def marshal_long(longint):
-    if longint is None:
-        return ''
-    return int64_pack(longint)
-
-def unmarshal_float(bytestr):
-    if not bytestr:
-        return None
-    return float_unpack(bytestr)
-
-def marshal_float(f):
-    if f is None:
-        return ''
-    return float_pack(f)
-
-def unmarshal_double(bytestr):
-    if not bytestr:
-        return None
-    return double_unpack(bytestr)
-
-def marshal_double(d):
-    if d is None:
-        return ''
-    return double_pack(d)
-
-def unmarshal_date(bytestr):
-    if not bytestr:
-        return None
-    return unmarshal_long(bytestr) / 1000.0
-
-def marshal_date(date):
-    if date is None:
-        return ''
-    if isinstance(date, basestring):
-        if date[-5] in ('+', '-'):
-            offset = (int(date[-4:-2]) * 3600 + int(date[-2:]) * 60) * int(date[-5] + '1')
-            date = date[:-5]
-        else:
-            offset = -time.timezone
-        for tformat in cql_time_formats:
-            try:
-                tval = time.strptime(date, tformat)
-            except ValueError:
-                continue
-            date = calendar.timegm(tval) + offset
-            break
-        else:
-            raise ValueError("can't interpret %r as a date" % (date,))
-    return marshal_long(date * 1000)
-
-def unmarshal_decimal(bytestr):
-    if not bytestr:
-        return None
-    scale = unmarshal_int32(bytestr[:4])
-    unscaled = decode_bigint(bytestr[4:])
-    return Decimal('%de%d' % (unscaled, -scale))
-
-def marshal_decimal(dec):
-    if dec is None:
-        return ''
-    sign, digits, exponent = dec.as_tuple()
-    unscaled = int(''.join([str(digit) for digit in digits]))
-    if sign:
-        unscaled *= -1
-    scale = marshal_int32(-exponent)
-    unscaled = encode_bigint(unscaled)
-    return scale + unscaled
-
-def unmarshal_uuid(bytestr):
-    if not bytestr:
-        return None
-    return UUID(bytes=bytestr)
-
-def marshal_uuid(uuid):
-    if uuid is None:
-        return ''
-    return uuid.bytes
-
-def unmarshal_json(j):
-    if j is None:
-        return None
-    return json.loads(j)
-
-unmarshal_list = unmarshal_map = unmarshal_set = unmarshal_json
-
-unmarshallers = {BYTES_TYPE:          unmarshal_noop,
-                 ASCII_TYPE:          unmarshal_noop,
-                 BOOLEAN_TYPE:        unmarshal_bool,
-                 DATE_TYPE:           unmarshal_date,
-                 DECIMAL_TYPE:        unmarshal_decimal,
-                 UTF8_TYPE:           unmarshal_utf8,
-                 INT32_TYPE:          unmarshal_int32,
-                 INTEGER_TYPE:        unmarshal_int,
-                 LONG_TYPE:           unmarshal_long,
-                 FLOAT_TYPE:          unmarshal_float,
-                 DOUBLE_TYPE:         unmarshal_double,
-                 UUID_TYPE:           unmarshal_uuid,
-                 LEXICAL_UUID_TYPE:   unmarshal_uuid,
-                 TIME_UUID_TYPE:      unmarshal_uuid,
-                 LIST_TYPE:           unmarshal_list,
-                 MAP_TYPE:            unmarshal_map,
-                 SET_TYPE:            unmarshal_set,
-                 COUNTER_COLUMN_TYPE: unmarshal_long}
-for name, typ in unmarshallers.items():
-    short_name = name.split('.')[-1]
-    unmarshallers[short_name] = typ
-
-marshallers =   {BYTES_TYPE:          marshal_noop,
-                 ASCII_TYPE:          marshal_noop,
-                 BOOLEAN_TYPE:        marshal_bool,
-                 DATE_TYPE:           marshal_date,
-                 DECIMAL_TYPE:        marshal_decimal,
-                 UTF8_TYPE:           marshal_utf8,
-                 INT32_TYPE:          marshal_int32,
-                 INTEGER_TYPE:        marshal_int,
-                 LONG_TYPE:           marshal_long,
-                 FLOAT_TYPE:          marshal_float,
-                 DOUBLE_TYPE:         marshal_double,
-                 UUID_TYPE:           marshal_uuid,
-                 LEXICAL_UUID_TYPE:   marshal_uuid,
-                 TIME_UUID_TYPE:      marshal_uuid,
-                 COUNTER_COLUMN_TYPE: marshal_long}
-for name, typ in marshallers.items():
-    short_name = name.split('.')[-1]
-    marshallers[short_name] = typ
-
-def decode_bigint(term):
+def varint_unpack(term):
     val = int(term.encode('hex'), 16)
     if (ord(term[0]) & 128) != 0:
         val = val - (1 << (len(term) * 8))
@@ -344,7 +126,7 @@ def bitlength(n):
         bitlen += 1
     return bitlen
 
-def encode_bigint(big):
+def varint_pack(big):
     pos = True
     if big < 0:
         bytelength = bitlength(abs(big) - 1) / 8 + 1
@@ -362,6 +144,3 @@ def encode_bigint(big):
 def __escape_quotes(term):
     assert isinstance(term, basestring)
     return term.replace("'", "''")
-
-def cql_marshal(val, typ):
-    return marshallers[typ](val)
