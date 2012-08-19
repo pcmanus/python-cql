@@ -136,7 +136,7 @@ class _CassandraType(object):
         if cls.num_subtypes != 'UNKNOWN' and len(subtypes) != cls.num_subtypes:
             raise ValueError("%s types require %d subtypes (%d given)"
                              % (cls.typename, cls.num_subtypes, len(subtypes)))
-        newname = cls.cass_parameterized_type_with(subtypes)
+        newname = cls.cass_parameterized_type_with(subtypes).encode('utf8')
         return type(newname, (cls,), {'subtypes': subtypes, 'cassname': cls.cassname})
 
     @classmethod
@@ -157,7 +157,7 @@ class _UnrecognizedType(_CassandraType):
     num_subtypes = 'UNKNOWN'
 
 def mkUnrecognizedType(casstypename):
-    return CassandraTypeType(casstypename,
+    return CassandraTypeType(casstypename.encode('utf8'),
                              (_UnrecognizedType,),
                              {'typename': "'%s'" % casstypename})
 
