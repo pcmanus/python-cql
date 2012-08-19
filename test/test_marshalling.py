@@ -16,8 +16,8 @@
 
 import unittest
 from decimal import Decimal
-from uuid import UUID
 import cql
+from cql.apivalues import UUID
 from cql.cqltypes import lookup_casstype
 
 marshalled_value_pairs = (
@@ -62,6 +62,17 @@ marshalled_value_pairs = (
     ('\xff' * 16, 'UUIDType', UUID('ffffffff-ffff-ffff-ffff-ffffffffffff')),
     ('I\x15~\xfc\xef<\x9d\xe3\x16\x98\xaf\x80\x1f\xb4\x0b*', 'UUIDType', UUID('49157efc-ef3c-9de3-1698-af801fb40b2a')),
     ('', 'UUIDType', None),
+    ('', 'MapType(AsciiType, BooleanType)', None),
+    ('', 'ListType(FloatType)', None),
+    ('', 'SetType(LongType)', None),
+    ('\x00\x00', 'MapType(DecimalType, BooleanType)', {}),
+    ('\x00\x00', 'ListType(FloatType)', ()),
+    ('\x00\x00', 'SetType(IntegerType)', set()),
+    ('\x00\x01\x00\x10\xafYC\xa3\xea<\x11\xe1\xabc\xc4,\x03"y\xf0', 'ListType(TimeUUIDType)', (UUID(bytes='\xafYC\xa3\xea<\x11\xe1\xabc\xc4,\x03"y\xf0'),)),
+    # these following entries work for me right now, but they're dependent on
+    # vagaries of internal python ordering for unordered types
+    ('\x00\x03\x00\x06\xe3\x81\xbfbob\x00\x04\x00\x00\x00\xc7\x00\x00\x00\x04\xff\xff\xff\xff\x00\x01\\\x00\x04\x00\x00\x00\x00', 'MapType(UTF8Type, Int32Type)', {u'\u307fbob': 199, u'': -1, u'\\': 0}),
+    ('\x00\x02\x00\x08@\x14\x00\x00\x00\x00\x00\x00\x00\x08@\x01\x99\x99\x99\x99\x99\x9a', 'SetType(DoubleType)', set([2.2, 5.0])),
 )
 
 class TestUnmarshal(unittest.TestCase):
