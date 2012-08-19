@@ -14,12 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 import struct
-import cql
-
-__all__ = ['prepare_inline', 'prepare_query', 'cql_quote',
-           'cql_marshal', 'PreparedQuery']
 
 def _make_packer(format_string):
     try:
@@ -42,76 +37,6 @@ uint16_pack, uint16_unpack = _make_packer('>H')
 uint8_pack, uint8_unpack = _make_packer('>B')
 float_pack, float_unpack = _make_packer('>f')
 double_pack, double_unpack = _make_packer('>d')
-
-stringlit_re = re.compile(r"""('[^']*'|"[^"]*")""")
-comments_re = re.compile(r'(/\*(?:[^*]|\*[^/])*\*/|//.*$|--.*$)', re.MULTILINE)
-param_re = re.compile(r'''
-    ( \W )            # don't match : at the beginning of the text (meaning it
-                      # immediately follows a comment or string literal) or
-                      # right after an identifier character
-    : ( \w+ )
-    (?= \W )          # and don't match a param that is immediately followed by
-                      # a comment or string literal either
-''', re.IGNORECASE | re.VERBOSE)
-
-def replace_param_substitutions(query, replacer):
-    split_strings = stringlit_re.split(' ' + query + ' ')
-    split_str_and_cmt = []
-    for p in split_strings:
-        if p[:1] in '\'"':
-            split_str_and_cmt.append(p)
-        else:
-            split_str_and_cmt.extend(comments_re.split(p))
-    output = []
-    for p in split_str_and_cmt:
-        if p[:1] in '\'"' or p[:2] in ('--', '//', '/*'):
-            output.append(p)
-        else:
-            output.append(param_re.sub(replacer, p))
-    assert output[0][0] == ' ' and output[-1][-1] == ' '
-    return ''.join(output)[1:-1]
-
-class PreparedQuery(object):
-    def __init__(self, querytext, itemid, vartypes, paramnames):
-        self.querytext = querytext
-        self.itemid = itemid
-        self.vartypes = vartypes
-        self.paramnames = paramnames
-        if len(self.vartypes) != len(self.paramnames):
-            raise cql.ProgrammingError("Length of variable types list is not the same"
-                                       " length as the list of parameter names")
-
-    def encode_params(self, params):
-        return [cql_marshal(params[n], t) for (n, t) in zip(self.paramnames, self.vartypes)]
-
-def prepare_inline(query, params):
-    """
-    For every match of the form ":param_name", call cql_quote
-    on kwargs['param_name'] and replace that section of the query
-    with the result
-    """
-
-    def param_replacer(match):
-        return match.group(1) + cql_quote(params[match.group(2)])
-    return replace_param_substitutions(query, param_replacer)
-
-def prepare_query(querytext):
-    paramnames = []
-    def found_param(match):
-        pre_param_text = match.group(1)
-        paramname = match.group(2)
-        paramnames.append(paramname)
-        return pre_param_text + '?'
-    transformed_query = replace_param_substitutions(querytext, found_param)
-    return transformed_query, paramnames
-
-def cql_quote(term):
-    if isinstance(term, unicode):
-        return "'%s'" % __escape_quotes(term.encode('utf8'))
-    elif isinstance(term, (str, bool)):
-        return "'%s'" % __escape_quotes(str(term))
-    else:
-        return str(term)
 
 def varint_unpack(term):
     val = int(term.encode('hex'), 16)
@@ -140,7 +65,3 @@ def varint_pack(big):
         revbytes.append('\x00')
     revbytes.reverse()
     return ''.join(revbytes)
-
-def __escape_quotes(term):
-    assert isinstance(term, basestring)
-    return term.replace("'", "''")

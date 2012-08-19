@@ -1,4 +1,3 @@
-
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -19,7 +18,7 @@ import re
 import zlib
 
 import cql
-from cql.marshal import prepare_inline, prepare_query, PreparedQuery
+from cql.query import prepare_inline, prepare_query, PreparedQuery
 from cql.decoders import SchemaDecoder
 from cql.cassandra.ttypes import (
     Compression,
