@@ -15,7 +15,7 @@
 # limitations under the License.
 
 from cql.cursor import Cursor
-from cql.query import cql_quote
+from cql.query import cql_quote, cql_quote_name
 from cql.cassandra import Cassandra
 from thrift.transport import TTransport, TSocket
 from thrift.protocol import TBinaryProtocol
@@ -63,7 +63,11 @@ class Connection(object):
 
         if keyspace:
             c = self.cursor()
-            c.execute('USE %s;' % cql_quote(keyspace))
+            if self.cql_major_version >= 3:
+                ksname = cql_quote_name(keyspace)
+            else:
+                ksname = cql_quote(keyspace)
+            c.execute('USE %s' % ksname)
             c.close()
 
     def __str__(self):
@@ -96,5 +100,5 @@ class Connection(object):
         return Cursor(self)
 
 # TODO: Pull connections out of a pool instead.
-def connect(host, port=9160, keyspace='system', user=None, password=None, cql_version=None):
-    return connection.Connection(host, port, keyspace, user, password, cql_version)
+def connect(host, port=9160, keyspace=None, user=None, password=None, cql_version=None):
+    return Connection(host, port, keyspace, user, password, cql_version)

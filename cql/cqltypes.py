@@ -86,6 +86,7 @@ class _CassandraType(object):
     __metaclass__ = CassandraTypeType
     subtypes = ()
     num_subtypes = 0
+    empty_binary_ok = False
 
     def __init__(self, val):
         self.val = self.validate(val)
@@ -100,14 +101,17 @@ class _CassandraType(object):
 
     @classmethod
     def from_binary(cls, byts):
-        if not byts:
-            return cls(None)
-        return cls(cls.deserialize(byts))
+        if byts is None:
+            return None
+        if byts == '' and not cls.empty_binary_ok:
+            return None
+        return cls.deserialize(byts)
 
-    def to_binary(self):
-        if self.val is None:
+    @classmethod
+    def to_binary(cls, val):
+        if val is None:
             return ''
-        return self.serialize(self.val)
+        return cls.serialize(val)
 
     @staticmethod
     def deserialize(byts):
@@ -155,10 +159,15 @@ def mkUnrecognizedType(casstypename):
 
 class BytesType(_CassandraType):
     typename = 'blob'
+    empty_binary_ok = True
 
     @staticmethod
     def validate(val):
         return Binary(val)
+
+    @staticmethod
+    def serialize(val):
+        return str(val)
 
 class DecimalType(_CassandraType):
     typename = 'decimal'
@@ -211,6 +220,7 @@ class BooleanType(_CassandraType):
 
 class AsciiType(_CassandraType):
     typename = 'ascii'
+    empty_binary_ok = True
 
 class FloatType(_CassandraType):
     typename = 'float'
@@ -308,6 +318,7 @@ class TimeUUIDType(DateType):
 
 class UTF8Type(_CassandraType):
     typename = 'text'
+    empty_binary_ok = True
 
     @staticmethod
     def deserialize(byts):
@@ -357,7 +368,7 @@ class _SimpleParameterizedType(_ParameterizedType):
             p += 2
             item = byts[p:p+itemlen]
             p += itemlen
-            result.append(subtype.deserialize(item))
+            result.append(subtype.from_binary(item))
         return cls.adapter(result)
 
     @classmethod
@@ -366,7 +377,7 @@ class _SimpleParameterizedType(_ParameterizedType):
         buf = StringIO()
         buf.write(uint16_pack(len(items)))
         for item in items:
-            itembytes = subtype.serialize(item)
+            itembytes = subtype.to_binary(item)
             buf.write(uint16_pack(len(itembytes)))
             buf.write(itembytes)
         return buf.getvalue()
@@ -374,7 +385,7 @@ class _SimpleParameterizedType(_ParameterizedType):
 class ListType(_SimpleParameterizedType):
     typename = 'list'
     num_subtypes = 1
-    adapter = list
+    adapter = tuple
 
 class SetType(_SimpleParameterizedType):
     typename = 'set'
@@ -405,8 +416,8 @@ class MapType(_ParameterizedType):
             p += 2
             valbytes = byts[p:p+val_len]
             p += val_len
-            key = subkeytype.deserialize(keybytes)
-            val = subvaltype.deserialize(valbytes)
+            key = subkeytype.from_binary(keybytes)
+            val = subvaltype.from_binary(valbytes)
             themap[key] = val
         return themap
 
@@ -416,8 +427,8 @@ class MapType(_ParameterizedType):
         buf = StringIO()
         buf.write(uint16_pack(len(themap)))
         for key, val in themap.iteritems():
-            keybytes = subkeytype.serialize(key)
-            valbytes = subvaltype.serialize(val)
+            keybytes = subkeytype.to_binary(key)
+            valbytes = subvaltype.to_binary(val)
             buf.write(uint16_pack(len(keybytes)))
             buf.write(keybytes)
             buf.write(uint16_pack(len(valbytes)))

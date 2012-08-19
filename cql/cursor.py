@@ -153,7 +153,8 @@ class Cursor:
             self.rs_idx = 0
             self.rowcount = len(self.result)
             if self.result:
-                self.description, self.name_info = self.decoder.decode_metadata(self.result[0])
+                self.description, self.name_info, self.column_types = \
+                        self.decoder.decode_metadata_and_types(self.result[0])
             else:
                 self.description = None
         elif response.type == CqlResultType.INT:
@@ -200,19 +201,20 @@ class Cursor:
         else:
             if self.cql_major_version < 3:
                 # (don't bother redecoding descriptions or names otherwise)
-                self.description, self.name_info = self.decoder.decode_metadata(row)
-            return self.decoder.decode_row(row)
+                self.description, self.name_info, self.column_types = \
+                        self.decoder.decode_metadata_and_types(row)
+            return self.decoder.decode_row(row, self.column_types)
 
     def fetchmany(self, size=None):
         self.__checksock()
         if size is None:
             size = self.arraysize
-        # we avoid leveraging fetchone here to avoid calling decode_metadata unnecessarily
+        # we avoid leveraging fetchone here to avoid decoding metadata unnecessarily
         L = []
         while len(L) < size and self.rs_idx < len(self.result):
             row = self.result[self.rs_idx]
             self.rs_idx += 1
-            L.append(self.decoder.decode_row(row))
+            L.append(self.decoder.decode_row(row, self.column_types))
         return L
 
     def fetchall(self):

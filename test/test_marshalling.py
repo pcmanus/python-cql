@@ -18,7 +18,7 @@ import unittest
 from decimal import Decimal
 from uuid import UUID
 import cql
-from cql.marshal import unmarshallers, marshallers, unmarshal_noop, marshal_noop
+from cql.cqltypes import lookup_casstype
 
 marshalled_value_pairs = (
     ('lorem ipsum dolor sit amet', 'AsciiType', 'lorem ipsum dolor sit amet'),
@@ -67,8 +67,8 @@ marshalled_value_pairs = (
 class TestUnmarshal(unittest.TestCase):
     def test_unmarshalling(self):
         for serializedval, valtype, nativeval in marshalled_value_pairs:
-            unmarshaller = unmarshallers.get(valtype, unmarshal_noop)
-            whatwegot = unmarshaller(serializedval)
+            unmarshaller = lookup_casstype(valtype)
+            whatwegot = unmarshaller.from_binary(serializedval)
             self.assertEqual(whatwegot, nativeval,
                              msg='Unmarshaller for %s (%s) failed: unmarshal(%r) got %r instead of %r'
                                  % (valtype, unmarshaller, serializedval, whatwegot, nativeval))
@@ -78,8 +78,8 @@ class TestUnmarshal(unittest.TestCase):
 
     def test_marshalling(self):
         for serializedval, valtype, nativeval in marshalled_value_pairs:
-            marshaller = marshallers.get(valtype, marshal_noop)
-            whatwegot = marshaller(nativeval)
+            marshaller = lookup_casstype(valtype)
+            whatwegot = marshaller.to_binary(nativeval)
             self.assertEqual(whatwegot, serializedval,
                              msg='Marshaller for %s (%s) failed: marshal(%r) got %r instead of %r'
                                  % (valtype, marshaller, nativeval, whatwegot, serializedval))

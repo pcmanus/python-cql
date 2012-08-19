@@ -17,7 +17,7 @@
 
 import unittest
 import cql
-from cql.marshal import prepare_inline
+from cql.query import prepare_inline
 
 # TESTS[i] ARGUMENTS[i] -> STANDARDS[i]
 TESTS = (

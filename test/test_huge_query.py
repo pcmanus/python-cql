@@ -16,7 +16,7 @@
 
 import unittest
 import time
-from cql import marshal
+from cql import query
 
 huge_query = """\
 BEGIN BATCH USING CONSISTENCY ONE
@@ -528,13 +528,13 @@ class TestHugeQuery(unittest.TestCase):
 
     def test_huge_query_noparams(self):
         t1 = time.time()
-        expanded = marshal.prepare_inline(huge_query, {})
+        expanded = query.prepare_inline(huge_query, {})
         t2 = time.time()
         self.assertEqual(huge_query, expanded)
         self.assertTrue((t2 - t1) < self.MAX_TIME)
 
         t1 = time.time()
-        prepared, names = marshal.prepare_query(huge_query)
+        prepared, names = query.prepare_query(huge_query)
         t2 = time.time()
         self.assertEqual(huge_query, prepared)
         self.assertEqual(names, [])
@@ -544,14 +544,14 @@ class TestHugeQuery(unittest.TestCase):
         huge_query_2 = huge_query + ':boo'
 
         t1 = time.time()
-        expanded = marshal.prepare_inline(huge_query_2, {'boo': 'hoo'})
+        expanded = query.prepare_inline(huge_query_2, {'boo': 'hoo'})
         t2 = time.time()
         self.assertEqual(huge_query, expanded[:len(huge_query)])
         self.assertTrue(expanded.endswith("\n'hoo'"))
         self.assertTrue((t2 - t1) < self.MAX_TIME)
 
         t1 = time.time()
-        prepared, names = marshal.prepare_query(huge_query_2)
+        prepared, names = query.prepare_query(huge_query_2)
         t2 = time.time()
         self.assertEqual(huge_query, prepared[:len(huge_query)])
         self.assertEqual(names, ['boo'])

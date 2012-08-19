@@ -16,6 +16,7 @@
 
 import re
 from cql.apivalues import ProgrammingError
+from cql.cqltypes import lookup_casstype
 
 stringlit_re = re.compile(r"""('[^']*'|"[^"]*")""")
 comments_re = re.compile(r'(/\*(?:[^*]|\*[^/])*\*/|//.*$|--.*$)', re.MULTILINE)
@@ -49,14 +50,14 @@ class PreparedQuery(object):
     def __init__(self, querytext, itemid, vartypes, paramnames):
         self.querytext = querytext
         self.itemid = itemid
-        self.vartypes = map(cqltypes.lookup_casstype, vartypes)
+        self.vartypes = map(lookup_casstype, vartypes)
         self.paramnames = paramnames
         if len(self.vartypes) != len(self.paramnames):
             raise ProgrammingError("Length of variable types list is not the same"
                                    " length as the list of parameter names")
 
     def encode_params(self, params):
-        return [t.serialize(params[n]) for (n, t) in zip(self.paramnames, self.vartypes)]
+        return [t.to_binary(t.validate(params[n])) for (n, t) in zip(self.paramnames, self.vartypes)]
 
 def prepare_inline(query, params):
     """
@@ -90,3 +91,8 @@ def cql_quote(term):
 def __escape_quotes(term):
     assert isinstance(term, basestring)
     return term.replace("'", "''")
+
+def cql_quote_name(name):
+    if isinstance(name, unicode):
+        name = name.encode('utf8')
+    return '"%s"' % name.replace('"', '""')
