@@ -56,7 +56,7 @@ class SchemaDecoder(object):
                 name = self.name_decode_error(e, namebytes, comparator)
             column_types.append(valdtype)
             description.append((name, validator, None, None, None, None, True))
-            name_info.append((namebytes, comparator))
+            name_info.append((namebytes, comptype))
 
         return description, name_info, column_types
 

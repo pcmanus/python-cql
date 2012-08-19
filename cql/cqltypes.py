@@ -149,6 +149,10 @@ class _CassandraType(object):
     def cass_parameterized_type(cls, full=False):
         return cls.cass_parameterized_type_with(cls.subtypes, full=full)
 
+# it's initially named with a _ to avoid registering it as a real type, but
+# client programs may want to use the name still for isinstance(), etc
+CassandraType = _CassandraType
+
 class _UnrecognizedType(_CassandraType):
     num_subtypes = 'UNKNOWN'
 

@@ -42,6 +42,7 @@ class Cursor:
     _ddl_re = re.compile("\s*(CREATE|ALTER|DROP)\s+",
                          re.IGNORECASE | re.MULTILINE)
     supports_prepared_queries = False
+    supports_column_types = True
     supports_name_info = True
 
     def __init__(self, parent_connection):
@@ -110,6 +111,7 @@ class Cursor:
         self.rowcount = 0
         self.description = None
         self.name_info = None
+        self.column_types = None
 
     def execute(self, cql_query, params={}, decoder=None):
         if isinstance(cql_query, unicode):
@@ -153,10 +155,7 @@ class Cursor:
             self.rs_idx = 0
             self.rowcount = len(self.result)
             if self.result:
-                self.description, self.name_info, self.column_types = \
-                        self.decoder.decode_metadata_and_types(self.result[0])
-            else:
-                self.description = None
+                self.get_metadata_info(self.result[0])
         elif response.type == CqlResultType.INT:
             self.result = [(response.num,)]
             self.rs_idx = 0
@@ -175,6 +174,10 @@ class Cursor:
 
         # 'Return values are not defined.'
         return True
+
+    def get_metadata_info(self, row):
+        self.description, self.name_info, self.column_types = \
+                self.decoder.decode_metadata_and_types(row)
 
     def executemany(self, operation_list, argslist):
         self.__checksock()
@@ -201,8 +204,7 @@ class Cursor:
         else:
             if self.cql_major_version < 3:
                 # (don't bother redecoding descriptions or names otherwise)
-                self.description, self.name_info, self.column_types = \
-                        self.decoder.decode_metadata_and_types(row)
+                self.get_metadata_info(row)
             return self.decoder.decode_row(row, self.column_types)
 
     def fetchmany(self, size=None):
