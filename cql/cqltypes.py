@@ -22,6 +22,7 @@ from cql.marshal import (int8_pack, int8_unpack, uint16_pack, uint16_unpack,
 from decimal import Decimal
 import time
 import calendar
+import re
 
 try:
     from cStringIO import StringIO
@@ -50,22 +51,49 @@ class CassandraTypeType(type):
             _cqltypes[cls.typename] = cls
         return cls
 
-def lookup_casstype(casstype):
-    args = ()
+casstype_scanner = re.Scanner((
+    (r'[()]', lambda s,t: t),
+    (r'[a-zA-Z0-9_.:]+', lambda s,t: t),
+    (r'[\s,]', None),
+))
+
+def lookup_casstype_simple(casstype):
     shortname = trim_if_startswith(casstype, apache_cassandra_type_prefix)
-    if '(' in shortname:
-        # do we need to support arbitrary nesting? if so, this is where
-        # we need to tokenize and parse
-        assert shortname.endswith(')'), shortname
-        shortname, args = shortname[:-1].split('(', 1)
-        args = [lookup_casstype(s.strip()) for s in args.split(',')]
     try:
         typeclass = _casstypes[shortname]
     except KeyError:
         typeclass = mkUnrecognizedType(casstype)
-    if args:
-        typeclass = typeclass.apply_parameters(*args)
     return typeclass
+
+def parse_casstype_args(typestring):
+    tokens, remainder = casstype_scanner.scan(typestring)
+    if remainder:
+        raise ValueError("weird characters %r at end" % remainder)
+    args = [[]]
+    for tok in tokens:
+        if tok == '(':
+            args.append([])
+        elif tok == ')':
+            arglist = args.pop()
+            ctype = args[-1].pop()
+            paramized = ctype.apply_parameters(*arglist)
+            args[-1].append(paramized)
+        else:
+            if ':' in tok:
+                # ignore those column name hex encoding bit; we have the
+                # proper column name from elsewhere
+                tok = tok.rsplit(':', 1)[-1]
+            ctype = lookup_casstype_simple(tok)
+            args[-1].append(ctype)
+    assert len(args) == 1, args
+    assert len(args[0]) == 1, args[0]
+    return args[0][0]
+
+def lookup_casstype(casstype):
+    try:
+        return parse_casstype_args(casstype)
+    except (ValueError, AssertionError, IndexError), e:
+        raise ValueError("Don't know how to parse type string %r: %s" % (casstype, e))
 
 def lookup_cqltype(cqltype):
     args = ()
@@ -439,10 +467,18 @@ class MapType(_ParameterizedType):
             buf.write(valbytes)
         return buf.getvalue()
 
+class CompositeType(_ParameterizedType):
+    typename = "'org.apache.cassandra.db.marshal.CompositeType'"
+    num_subtypes = 'UNKNOWN'
+
+class ColumnToCollectionType(_ParameterizedType):
+    typename = "'org.apache.cassandra.db.marshal.ColumnToCollectionType'"
+    num_subtypes = 1
+
 def is_counter_type(t):
     if isinstance(t, basestring):
         t = lookup_casstype(t)
-    return t.typename == 'counter'
+    return issubclass(t, CounterColumnType)
 
 cql_type_to_apache_class = dict([(c, t.cassname) for (c, t) in _cqltypes.items()])
 apache_class_to_cql_type = dict([(n, t.typename) for (n, t) in _casstypes.items()])
