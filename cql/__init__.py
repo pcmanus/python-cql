@@ -1,4 +1,3 @@
-
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -16,11 +15,9 @@
 # limitations under the License.
 
 import exceptions
-import datetime
-import time
 
 from cql import connection
-from cql import marshal
+from cql import cqltypes
 
 
 # dbapi Error hierarchy
@@ -51,27 +48,25 @@ def connect(host, port=9160, keyspace='system', user=None, password=None, cql_ve
 
 # Module Type Objects and Constructors
 
-Date = datetime.date
-
-Time = datetime.time
-
-Timestamp = datetime.datetime
-
 Binary = buffer
 
-def DateFromTicks(ticks):
-    return Date(*time.localtime(ticks)[:3])
+try:
+    from uuid import UUID  # new in Python 2.5
+except ImportError:
+    class UUID:
+        def __init__(self, bytes):
+            self.bytes = bytes
 
-def TimeFromTicks(ticks):
-    return Time(*time.localtime(ticks)[3:6])
-
-def TimestampFromTicks(ticks):
-    return Timestamp(*time.localtime(ticks)[:6])
+        def get_time(self):
+            thisint = reduce(lambda a, b: a<<8 | b, map(ord, self.bytes), 0)
+            return ((thisint >> 64 & 0x0fff) << 48 |
+                    (thisint >> 80 & 0xffff) << 32 |
+                    (thisint >> 96))
 
 class DBAPITypeObject:
 
     def __init__(self, *values):
-        self.values = values
+        self.values = list(values) + [t.cass_parameterized_type(full=True) for t in values]
 
     def __cmp__(self,other):
         if other in self.values:
@@ -81,16 +76,15 @@ class DBAPITypeObject:
         else:
             return -1
 
-STRING = DBAPITypeObject(marshal.BYTES_TYPE, marshal.ASCII_TYPE, marshal.UTF8_TYPE)
+STRING = DBAPITypeObject(cqltypes.BytesType, cqltypes.AsciiType, cqltypes.UTF8Type)
 
-BINARY = DBAPITypeObject(marshal.BYTES_TYPE, marshal.UUID_TYPE, marshal.LEXICAL_UUID_TYPE)
+BINARY = DBAPITypeObject(cqltypes.BytesType, cqltypes.UUIDType)
 
-NUMBER = DBAPITypeObject(marshal.LONG_TYPE, marshal.INTEGER_TYPE)
+NUMBER = DBAPITypeObject(cqltypes.LongType, cqltypes.IntegerType, cqltypes.DecimalType,
+                         cqltypes.FloatType, cqltypes.DoubleType, cqltypes.Int32Type,
+                         cqltypes.CounterColumnType)
 
-DATETIME = DBAPITypeObject(marshal.TIME_UUID_TYPE)
+DATETIME = DBAPITypeObject(cqltypes.TimeUUIDType, cqltypes.DateType)
 
-ROWID = DBAPITypeObject(marshal.BYTES_TYPE, marshal.ASCII_TYPE, marshal.UTF8_TYPE,
-                        marshal.INT32_TYPE,
-                        marshal.INTEGER_TYPE, marshal.LONG_TYPE, marshal.UUID_TYPE,
-                        marshal.LEXICAL_UUID_TYPE, marshal.TIME_UUID_TYPE)
-
+# just include all of them
+ROWID = DBAPITypeObject(*cqltypes._cqltypes.items())
