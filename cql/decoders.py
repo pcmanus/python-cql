@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from cql import ProgrammingError
+from cql.apivalues import ProgrammingError
 
 class SchemaDecoder(object):
     """

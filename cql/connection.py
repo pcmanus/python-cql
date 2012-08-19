@@ -20,7 +20,7 @@ from cql.cassandra import Cassandra
 from thrift.transport import TTransport, TSocket
 from thrift.protocol import TBinaryProtocol
 from cql.cassandra.ttypes import AuthenticationRequest
-from cql import ProgrammingError, NotSupportedError
+from cql.apivalues import ProgrammingError, NotSupportedError
 
 
 class Connection(object):
@@ -94,3 +94,7 @@ class Connection(object):
         if not self.open_socket:
             raise ProgrammingError("Connection has been closed.")
         return Cursor(self)
+
+# TODO: Pull connections out of a pool instead.
+def connect(host, port=9160, keyspace='system', user=None, password=None, cql_version=None):
+    return connection.Connection(host, port, keyspace, user, password, cql_version)

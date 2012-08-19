@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from cql import Binary, UUID
+from cql.apivalues import Binary, UUID
 from cql.marshal import (int8_pack, int8_unpack, uint16_pack, uint16_unpack,
                          int32_pack, int32_unpack, int64_pack, int64_unpack,
                          float_pack, float_unpack, double_pack, double_unpack,

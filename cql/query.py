@@ -15,7 +15,7 @@
 # limitations under the License.
 
 import re
-from cql import ProgrammingError
+from cql.apivalues import ProgrammingError
 
 stringlit_re = re.compile(r"""('[^']*'|"[^"]*")""")
 comments_re = re.compile(r'(/\*(?:[^*]|\*[^/])*\*/|//.*$|--.*$)', re.MULTILINE)
