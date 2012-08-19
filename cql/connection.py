@@ -1,4 +1,3 @@
-
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -16,13 +15,17 @@
 # limitations under the License.
 
 from cql.cursor import Cursor
+from cql.query import cql_quote
 from cql.cassandra import Cassandra
 from thrift.transport import TTransport, TSocket
 from thrift.protocol import TBinaryProtocol
 from cql.cassandra.ttypes import AuthenticationRequest
+from cql import ProgrammingError, NotSupportedError
 
 
 class Connection(object):
+    cql_major_version = 2
+
     def __init__(self, host, port, keyspace, user=None, password=None, cql_version=None):
         """
         Params:
@@ -53,10 +56,14 @@ class Connection(object):
 
         if cql_version:
             self.client.set_cql_version(cql_version)
+            try:
+                self.cql_major_version = int(cql_version.split('.')[0])
+            except ValueError:
+                pass
 
         if keyspace:
             c = self.cursor()
-            c.execute('USE %s;' % keyspace)
+            c.execute('USE %s;' % cql_quote(keyspace))
             c.close()
 
     def __str__(self):
@@ -81,11 +88,9 @@ class Connection(object):
         return
 
     def rollback(self):
-        from cql import NotSupportedError
         raise NotSupportedError("Rollback functionality not present in Cassandra.")
 
     def cursor(self):
-        from cql import ProgrammingError
         if not self.open_socket:
             raise ProgrammingError("Connection has been closed.")
         return Cursor(self)

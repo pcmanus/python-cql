@@ -1,4 +1,3 @@
-
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import cql
-from cql.marshal import (unmarshallers, unmarshal_noop)
+from cql import ProgrammingError
 
 class SchemaDecoder(object):
     """
@@ -26,12 +24,12 @@ class SchemaDecoder(object):
         self.schema = schema
 
     def name_decode_error(self, err, namebytes, expectedtype):
-        raise cql.ProgrammingError("column name %r can't be deserialized as %s: %s"
-                                   % (namebytes, expectedtype, err))
+        raise ProgrammingError("column name %r can't be deserialized as %s: %s"
+                               % (namebytes, expectedtype, err))
 
     def value_decode_error(self, err, namebytes, valuebytes, expectedtype):
-        raise cql.ProgrammingError("value %r (in col %r) can't be deserialized as %s: %s"
-                                   % (valuebytes, namebytes, expectedtype, err))
+        raise ProgrammingError("value %r (in col %r) can't be deserialized as %s: %s"
+                               % (valuebytes, namebytes, expectedtype, err))
 
     def decode_description(self, row):
         return self.decode_metadata(row)[0]
@@ -39,16 +37,20 @@ class SchemaDecoder(object):
     def decode_metadata(self, row):
         schema = self.schema
         description = []
+        column_types = []
         name_info = []
         for column in row.columns:
             namebytes = column.name
             comparator = schema.name_types.get(namebytes, schema.default_name_type)
-            unmarshal = unmarshallers.get(comparator, unmarshal_noop)
+            comptype = cqltypes.lookup_casstype(comparator)
             validator = schema.value_types.get(namebytes, schema.default_value_type)
+            valdtype = cqltypes.lookup_casstype(validator)
+
             try:
-                name = unmarshal(namebytes)
+                name = comptype.deserialize(namebytes)
             except Exception, e:
-                name = self.name_decode_error(e, namebytes, validator)
+                name = self.name_decode_error(e, namebytes, comparator)
+            column_types.append(valdtype)
             description.append((name, validator, None, None, None, None, True))
             name_info.append((namebytes, comparator))
 
@@ -57,18 +59,12 @@ class SchemaDecoder(object):
     def decode_row(self, row):
         schema = self.schema
         values = []
-        for column in row.columns:
-            if column.value is None:
-                values.append(None)
-                continue
-
-            namebytes = column.name
-            validator = schema.value_types.get(namebytes, schema.default_value_type)
-            unmarshal = unmarshallers.get(validator, unmarshal_noop)
+        for (column, vtype) in zip(row.columns, self.column_types):
             try:
-                value = unmarshal(column.value)
+                value = vtype.deserialize(column.value or '')
             except Exception, e:
-                value = self.value_decode_error(e, namebytes, column.value, validator)
+                value = self.value_decode_error(e, column.name, column.value,
+                                                vtype.cass_parameterized_type(full=True))
             values.append(value)
 
         return values

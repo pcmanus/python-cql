@@ -47,6 +47,7 @@ class Cursor:
     def __init__(self, parent_connection):
         self.open_socket = True
         self._connection = parent_connection
+        self.cql_major_version = parent_connection.cql_major_version
 
         # A list of 7-tuples corresponding to the column metadata for the
         # current row (populated on execute() and on fetchone()):
@@ -153,6 +154,8 @@ class Cursor:
             self.rowcount = len(self.result)
             if self.result:
                 self.description, self.name_info = self.decoder.decode_metadata(self.result[0])
+            else:
+                self.description = None
         elif response.type == CqlResultType.INT:
             self.result = [(response.num,)]
             self.rs_idx = 0
@@ -195,7 +198,9 @@ class Cursor:
         if self.description is _COUNT_DESCRIPTION:
             return row
         else:
-            self.description, self.name_info = self.decoder.decode_metadata(row)
+            if self.cql_major_version < 3:
+                # (don't bother redecoding descriptions or names otherwise)
+                self.description, self.name_info = self.decoder.decode_metadata(row)
             return self.decoder.decode_row(row)
 
     def fetchmany(self, size=None):

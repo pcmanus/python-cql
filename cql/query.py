@@ -49,14 +49,14 @@ class PreparedQuery(object):
     def __init__(self, querytext, itemid, vartypes, paramnames):
         self.querytext = querytext
         self.itemid = itemid
-        self.vartypes = vartypes
+        self.vartypes = map(cqltypes.lookup_casstype, vartypes)
         self.paramnames = paramnames
         if len(self.vartypes) != len(self.paramnames):
             raise ProgrammingError("Length of variable types list is not the same"
                                    " length as the list of parameter names")
 
     def encode_params(self, params):
-        return [cql_marshal(params[n], t) for (n, t) in zip(self.paramnames, self.vartypes)]
+        return [t.serialize(params[n]) for (n, t) in zip(self.paramnames, self.vartypes)]
 
 def prepare_inline(query, params):
     """
