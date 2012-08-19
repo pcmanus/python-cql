@@ -40,6 +40,7 @@ sys.path.append(join(abspath(dirname(__file__)), '..'))
 
 import cql
 from cql.cassandra import Cassandra
+from cql.cqltypes import AsciiType, UUIDType
 
 def get_thrift_client(host=TEST_HOST, port=TEST_PORT):
     socket = TSocket.TSocket(host, port)
@@ -685,8 +686,10 @@ class TestCql(unittest.TestCase):
             SELECT KEY, '%s' FROM StandardTimeUUID WHERE KEY = 'uuidtest'
         """ % str(timeuuid))
         self.assertEqual(len(cursor.name_info), 2)
-        self.assertEqual(cursor.name_info[0], ('KEY', 'AsciiType'))
-        self.assertEqual(cursor.name_info[1], (timeuuid.bytes, 'UUIDType'))
+        self.assertEqual(cursor.name_info[0][0], 'KEY')
+        self.assertIsSubclass(cursor.name_info[0][1], AsciiType)
+        self.assertEqual(cursor.name_info[1][0], timeuuid.bytes)
+        self.assertIsSubclass(cursor.name_info[1][1], UUIDType)
 
     def test_time_uuid(self):
         "store and retrieve time-based (type 1) uuids"
