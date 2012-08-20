@@ -137,6 +137,8 @@ def lookup_casstype(casstype):
 
     """
 
+    if isinstance(casstype, CassandraType):
+        return casstype
     try:
         return parse_casstype_args(casstype)
     except (ValueError, AssertionError, IndexError), e:
@@ -157,6 +159,8 @@ def lookup_cqltype(cqltype):
 
     """
 
+    if isinstance(cqltype, CassandraType):
+        return cqltype
     args = ()
     if cqltype.startswith("'") and cqltype.endswith("'"):
         return lookup_casstype(cqltype[1:-1].replace("''", "'"))

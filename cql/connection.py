@@ -14,19 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from cql.cursor import Cursor
-from cql.query import cql_quote, cql_quote_name
-from cql.cassandra import Cassandra
-from thrift.transport import TTransport, TSocket
-from thrift.protocol import TBinaryProtocol
-from cql.cassandra.ttypes import AuthenticationRequest
 from cql.apivalues import ProgrammingError, NotSupportedError
-
 
 class Connection(object):
     cql_major_version = 2
 
-    def __init__(self, host, port, keyspace, user=None, password=None, cql_version=None):
+    def __init__(self, host, port, keyspace, user=None, password=None, cql_version=None,
+                 compression=None):
         """
         Params:
         * host .........: hostname of Cassandra node.
@@ -35,43 +29,30 @@ class Connection(object):
         * user .........: username used in authentication (optional).
         * password .....: password used in authentication (optional).
         * cql_version...: CQL version to use (optional).
+        * compression...: the sort of compression to use by default;
+        *                 overrideable per Cursor object. (optional).
         """
         self.host = host
         self.port = port
         self.keyspace = keyspace
+        self.cql_version = cql_version
+        self.compression = compression
+        self.open_socket = False
 
-        socket = TSocket.TSocket(host, port)
-        self.transport = TTransport.TFramedTransport(socket)
-        protocol = TBinaryProtocol.TBinaryProtocolAccelerated(self.transport)
-        self.client = Cassandra.Client(protocol)
+        self.credentials = None
+        if user or password:
+            self.credentials = {"username": user, "password": password}
 
-        socket.open()
+        self.establish_connection()
         self.open_socket = True
 
-        if user and password:
-            credentials = {"username": user, "password": password}
-            self.client.login(AuthenticationRequest(credentials=credentials))
-
-        self.remote_thrift_version = tuple(map(int, self.client.describe_version().split('.')))
-
-        if cql_version:
-            self.client.set_cql_version(cql_version)
-            try:
-                self.cql_major_version = int(cql_version.split('.')[0])
-            except ValueError:
-                pass
-
-        if keyspace:
-            c = self.cursor()
-            if self.cql_major_version >= 3:
-                ksname = cql_quote_name(keyspace)
-            else:
-                ksname = cql_quote(keyspace)
-            c.execute('USE %s' % ksname)
-            c.close()
-
     def __str__(self):
-        return "{host: '%s:%s', keyspace: '%s'}"%(self.host,self.port,self.keyspace)
+        return ("%s(host=%r, port=%r, keyspace=%r, %s)"
+                % (self.__class__.__name__, self.host, self.port, self.keyspace,
+                   self.open_socket and 'conn open' or 'conn closed'))
+
+    def keyspace_changed(self, keyspace):
+        self.keyspace = keyspace
 
     ###
     # Connection API
@@ -80,8 +61,7 @@ class Connection(object):
     def close(self):
         if not self.open_socket:
             return
-
-        self.transport.close()
+        self.terminate_connection()
         self.open_socket = False
 
     def commit(self):
@@ -97,8 +77,20 @@ class Connection(object):
     def cursor(self):
         if not self.open_socket:
             raise ProgrammingError("Connection has been closed.")
-        return Cursor(self)
+        curs = self.cursorclass(self)
+        curs.compression = self.compression
+        return curs
+
+class NativeConnection(Connection):
+    pass
 
 # TODO: Pull connections out of a pool instead.
-def connect(host, port=9160, keyspace=None, user=None, password=None, cql_version=None):
-    return Connection(host, port, keyspace, user, password, cql_version)
+def connect(host, port=9160, keyspace=None, user=None, password=None,
+            cql_version=None, native=False):
+    if native:
+        from native import NativeConnection
+        connclass = NativeConnection
+    else:
+        from thriftconnection import ThriftConnection
+        connclass = ThriftConnection
+    return connclass(host, port, keyspace, user, password, cql_version)

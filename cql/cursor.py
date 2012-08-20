@@ -14,39 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-import zlib
-
 import cql
-from cql.query import prepare_inline, prepare_query, PreparedQuery
 from cql.decoders import SchemaDecoder
-from cql.cassandra.ttypes import (
-    Compression,
-    CqlResultType,
-    InvalidRequestException,
-    UnavailableException,
-    TimedOutException,
-    SchemaDisagreementException)
-from thrift.Thrift import TApplicationException
+from cql.query import prepare_inline
 
 _COUNT_DESCRIPTION = (None, None, None, None, None, None, None)
-_VOID_DESCRIPTION = (None)
-
-MIN_THRIFT_FOR_PREPARED_QUERIES = (19, 27, 0)
+_VOID_DESCRIPTION = None
 
 class Cursor:
-    _keyspace_re = re.compile("USE (\w+);?",
-                              re.IGNORECASE | re.MULTILINE)
-    _cfamily_re = re.compile("\s*SELECT\s+.+?\s+FROM\s+[\']?(\w+)",
-                             re.IGNORECASE | re.MULTILINE | re.DOTALL)
-    _ddl_re = re.compile("\s*(CREATE|ALTER|DROP)\s+",
-                         re.IGNORECASE | re.MULTILINE)
+    default_decoder = SchemaDecoder
     supports_prepared_queries = False
     supports_column_types = True
     supports_name_info = True
 
     def __init__(self, parent_connection):
-        self.open_socket = True
         self._connection = parent_connection
         self.cql_major_version = parent_connection.cql_major_version
 
@@ -62,48 +43,15 @@ class Cursor:
 
         self.arraysize = 1
         self.rowcount = -1      # Populate on execute()
-        self.compression = 'GZIP'
+        self.compression = None
         self.decoder = None
-
-        if hasattr(parent_connection.client, 'execute_prepared_cql_query') \
-                and parent_connection.remote_thrift_version >= MIN_THRIFT_FOR_PREPARED_QUERIES:
-            self.supports_prepared_queries = True
 
     ###
     # Cursor API
     ###
 
     def close(self):
-        self.open_socket = False
-
-    def compress_query_text(self, querytext):
-        if self.compression == 'GZIP':
-            compressed_q = zlib.compress(querytext)
-        else:
-            compressed_q = querytext
-        req_compression = getattr(Compression, self.compression)
-        return compressed_q, req_compression
-
-    def prepare_inline(self, query, params):
-        try:
-            prepared_q_text = prepare_inline(query, params)
-        except KeyError, e:
-            raise cql.ProgrammingError("Unmatched named substitution: " +
-                                       "%s not given for %r" % (e, query))
-        return self.compress_query_text(prepared_q_text)
-
-    def prepare_query(self, query, paramtypes=None):
-        if isinstance(query, unicode):
-            raise ValueError("CQL query must be bytes, not unicode")
-        prepared_q_text, paramnames = prepare_query(query)
-        compressed_q, compression = self.compress_query_text(prepared_q_text)
-        presult = self._connection.client.prepare_cql_query(compressed_q, compression)
-        assert presult.count == len(paramnames)
-        if presult.variable_types is None and presult.count > 0:
-            raise cql.ProgrammingError("Cassandra did not provide types for bound"
-                                       " parameters. Prepared statements are only"
-                                       " supported with cql3.")
-        return PreparedQuery(query, presult.itemId, presult.variable_types, paramnames)
+        self._connection = None
 
     def pre_execution_setup(self):
         self.__checksock()
@@ -113,84 +61,29 @@ class Cursor:
         self.name_info = None
         self.column_types = None
 
+    def prepare_inline(self, query, params):
+        try:
+            return prepare_inline(query, params)
+        except KeyError, e:
+            raise cql.ProgrammingError("Unmatched named substitution: " +
+                                       "%s not given for %r" % (e, query))
+
     def execute(self, cql_query, params={}, decoder=None):
         if isinstance(cql_query, unicode):
             raise ValueError("CQL query must be bytes, not unicode")
         self.pre_execution_setup()
-
-        prepared_q, compress = self.prepare_inline(cql_query, params)
-        doquery = self._connection.client.execute_cql_query
-        response = self.handle_cql_execution_errors(doquery, prepared_q, compress)
-
+        prepared_q = self.prepare_inline(cql_query, params)
+        response = self.get_response(prepared_q)
         return self.process_execution_results(response, decoder=decoder)
 
     def execute_prepared(self, prepared_query, params={}, decoder=None):
         self.pre_execution_setup()
-
-        doquery = self._connection.client.execute_prepared_cql_query
-        paramvals = prepared_query.encode_params(params)
-        response = self.handle_cql_execution_errors(doquery, prepared_query.itemid, paramvals)
-
+        response = self.get_response_prepared(prepared_query, params)
         return self.process_execution_results(response, decoder=decoder)
-
-    def handle_cql_execution_errors(self, executor, *args, **kwargs):
-        try:
-            return executor(*args, **kwargs)
-        except InvalidRequestException, ire:
-            raise cql.ProgrammingError("Bad Request: %s" % ire.why)
-        except SchemaDisagreementException, sde:
-            raise cql.IntegrityError("Schema versions disagree, (try again later).")
-        except UnavailableException:
-            raise cql.OperationalError("Unable to complete request: one or "
-                                       "more nodes were unavailable.")
-        except TimedOutException:
-            raise cql.OperationalError("Request did not complete within rpc_timeout.")
-        except TApplicationException, tapp:
-            raise cql.InternalError("Internal application error")
-
-    def process_execution_results(self, response, decoder=None):
-        if response.type == CqlResultType.ROWS:
-            self.decoder = (decoder or SchemaDecoder)(response.schema)
-            self.result = response.rows
-            self.rs_idx = 0
-            self.rowcount = len(self.result)
-            if self.result:
-                self.get_metadata_info(self.result[0])
-        elif response.type == CqlResultType.INT:
-            self.result = [(response.num,)]
-            self.rs_idx = 0
-            self.rowcount = 1
-            # TODO: name could be the COUNT expression
-            self.description = _COUNT_DESCRIPTION
-            self.name_info = None
-        elif response.type == CqlResultType.VOID:
-            self.result = []
-            self.rs_idx = 0
-            self.rowcount = 0
-            self.description = _VOID_DESCRIPTION
-            self.name_info = ()
-        else:
-            raise Exception('unknown result type %s' % response.type)
-
-        # 'Return values are not defined.'
-        return True
 
     def get_metadata_info(self, row):
         self.description, self.name_info, self.column_types = \
                 self.decoder.decode_metadata_and_types(row)
-
-    def executemany(self, operation_list, argslist):
-        self.__checksock()
-        opssize = len(operation_list)
-        argsize = len(argslist)
-
-        if opssize > argsize:
-            raise cql.InterfaceError("Operations outnumber args for executemany().")
-        elif opssize < argsize:
-            raise cql.InterfaceError("Args outnumber operations for executemany().")
-
-        for idx in xrange(opssize):
-            self.execute(operation_list[idx], *argslist[idx])
 
     def fetchone(self):
         self.__checksock()
@@ -221,6 +114,19 @@ class Cursor:
 
     def fetchall(self):
         return self.fetchmany(len(self.result) - self.rs_idx)
+
+    def executemany(self, operation_list, argslist):
+        self.__checksock()
+        opssize = len(operation_list)
+        argsize = len(argslist)
+
+        if opssize > argsize:
+            raise cql.InterfaceError("Operations outnumber args for executemany().")
+        elif opssize < argsize:
+            raise cql.InterfaceError("Args outnumber operations for executemany().")
+
+        for idx in xrange(opssize):
+            self.execute(operation_list[idx], *argslist[idx])
 
     ###
     # extra, for cqlsh
@@ -262,6 +168,5 @@ class Cursor:
     ###
 
     def __checksock(self):
-        if not self.open_socket:
-            raise cql.InternalError("Cursor belonging to %s has been closed." %
-                                    (self._connection, ))
+        if self._connection is None:
+            raise cql.ProgrammingError("Cursor has been closed.")

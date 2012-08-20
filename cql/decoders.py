@@ -61,7 +61,6 @@ class SchemaDecoder(object):
         return description, name_info, column_types
 
     def decode_row(self, row, column_types=None):
-        schema = self.schema
         values = []
         if column_types is None:
             column_types = self.decode_metadata_and_types(row)[2]
@@ -74,3 +73,6 @@ class SchemaDecoder(object):
             values.append(value)
 
         return values
+
+    def decode_metadata_and_types_native(self, row):
+        pass

@@ -14,8 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from marshal import int32_pack, int32_unpack, uint16_pack, uint16_unpack
-from cqltypes import lookup_casstype
+import cql
+from cql.marshal import int32_pack, int32_unpack, uint16_pack, uint16_unpack
+from cql.cqltypes import lookup_cqltype
+from cql.connection import Connection
+from cql.cursor import Cursor, _VOID_DESCRIPTION, _COUNT_DESCRIPTION
+from cql.apivalues import ProgrammingError, OperationalError
+from cql.query import PreparedQuery, prepare_query, cql_quote_name
+import socket
+import itertools
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -82,12 +89,13 @@ class _MessageType(object):
         body = StringIO()
         self.send_body(body)
         body = body.getvalue()
-        write_byte(f, PROTOCOL_VERSION | HEADER_DIRECTION_FROM_CLIENT)
-        write_byte(f, 0) # no compression supported yet
-        write_byte(f, streamid)
-        write_byte(f, self.opcode)
-        write_int(f, len(body))
-        f.write(body)
+        version = PROTOCOL_VERSION | HEADER_DIRECTION_FROM_CLIENT
+        flags = 0 # no compression supported yet
+        msglen = int32_pack(len(body))
+        header = '%c%c%c%c%s' % (version, flags, streamid, self.opcode, msglen)
+        f.write(header)
+        if len(body) > 0:
+            f.write(body)
 
     def __str__(self):
         paramstrs = ['%s=%r' % (pname, getattr(self, pname)) for pname in self.params]
@@ -95,11 +103,9 @@ class _MessageType(object):
     __repr__ = __str__
 
 def read_frame(f):
-    version = read_byte(f)
-    flags = read_byte(f)
-    stream = read_byte(f)
-    opcode = read_byte(f)
-    body_len = read_int(f)
+    header = f.read(8)
+    version, flags, stream, opcode = map(ord, header[:4])
+    body_len = int32_unpack(header[4:])
     assert version & PROTOCOL_VERSION_MASK == PROTOCOL_VERSION, \
             "Unsupported CQL protocol version %d" % version
     assert version & HEADER_DIRECTION_MASK == HEADER_DIRECTION_TO_CLIENT, \
@@ -112,11 +118,6 @@ def read_frame(f):
     msg = msgclass.recv_body(StringIO(body))
     msg.stream_id = stream
     return msg
-
-def do_request(f, msg):
-    msg.send(f, 0)
-    f.flush()
-    return read_frame(f)
 
 class ErrorMessage(_MessageType):
     opcode = 0x00
@@ -139,9 +140,12 @@ class ErrorMessage(_MessageType):
         msg = read_string(f)
         return cls(code=code, message=msg)
 
-    def __str__(self):
-        return '<ErrorMessage code=%04x [%s] message=%r>' \
+    def summary(self):
+        return 'code=%04x [%s] message=%r' \
                % (self.code, self.error_codes.get(self.code, '(Unknown)'), self.message)
+
+    def __str__(self):
+        return '<ErrorMessage %s>' % self.summary()
     __repr__ = __str__
 
 class StartupMessage(_MessageType):
@@ -152,7 +156,10 @@ class StartupMessage(_MessageType):
     STARTUP_USE_COMPRESSION = 0x0001
 
     def send_body(self, f):
+        if isinstance(self.options, dict):
+            self.options = self.options.items()
         write_string(f, self.cqlversion)
+        write_short(f, len(self.options))
         for key, value in self.options:
             write_short(f, key)
             if key == STARTUP_USE_COMPRESSION:
@@ -161,8 +168,8 @@ class StartupMessage(_MessageType):
                 # should be a safe guess
                 write_string(f, value)
             else:
-                raise NotImplemented("Startup option 0x%04x not known; can't send "
-                                     "value to server" % key)
+                raise NotImplementedError("Startup option 0x%04x not known; can't send "
+                                          "value to server" % key)
 
 class ReadyMessage(_MessageType):
     opcode = 0x02
@@ -279,7 +286,7 @@ class ResultMessage(_MessageType):
     def recv_results_prepared(self, f):
         queryid = read_int(f)
         colspecs = cls.recv_results_metadata(f)
-        return PreparedResult(queryid, colspecs)
+        return (queryid, colspecs)
 
     @classmethod
     def recv_results_metadata(cls, f):
@@ -304,13 +311,16 @@ class ResultMessage(_MessageType):
 
     @classmethod
     def read_type(cls, f):
-        # XXX: stubbed out. should really return more useful 'type' objects.
         optid = read_short(f)
-        cqltype = lookup_cqltype(cls.type_codes.get(optid))
-        if cqltypename in ('list', 'set'):
+        try:
+            cqltype = lookup_cqltype(cls.type_codes[optid])
+        except KeyError:
+            raise cql.NotSupportedError("Unknown data type code 0x%x. Have to skip"
+                                        " entire result set." % optid)
+        if cqltype.typename in ('list', 'set'):
             subtype = cls.read_type(f)
             cqltype = cqltype.apply_parameters(subtype)
-        elif cqltypename == 'map':
+        elif cqltype.typename == 'map':
             keysubtype = cls.read_type(f)
             valsubtype = cls.read_type(f)
             cqltype = cqltype.apply_parameters(keysubtype, valsubtype)
@@ -338,6 +348,54 @@ class ExecuteMessage(_MessageType):
         write_short(f, len(self.queryparams))
         for param in self.queryparams:
             write_value(f, param)
+
+class ModeChangeMessage(_MessageType):
+    opcode = 0x0B
+    name = 'MODE_CHANGE'
+    params = ('is_control',)
+
+    def send_body(self, f):
+        write_byte(f, bool(self.is_control))
+
+known_event_types = frozenset((
+    'topology_change',
+    'status_change',
+))
+
+class RegisterMessage(_MessageType):
+    opcode = 0x0C
+    name = 'REGISTER'
+    params = ('eventlist',)
+
+    def send_body(self, f):
+        write_stringlist(f, self.eventlist)
+
+class EventMessage(_MessageType):
+    opcode = 0x0D
+    name = 'EVENT'
+    params = ('eventtype', 'eventargs')
+
+    @classmethod
+    def recv_body(cls, f):
+        eventtype = read_string(f).lower()
+        if eventtype in known_event_types:
+            readmethod = getattr(cls, 'recv_' + eventtype)
+            return cls(eventtype=eventtype, eventargs=readmethod(f))
+        raise cql.NotSupportedError('Unknown event type %r' % eventtype)
+
+    @classmethod
+    def recv_topology_change(cls, f):
+        # "new_node" or "removed_node"
+        changetype = read_string(f)
+        address = read_inet(f)
+        return dict(changetype=changetype, address=address)
+
+    @classmethod
+    def recv_status_change(cls, f):
+        # "up" or "down"
+        changetype = read_string(f)
+        address = read_inet(f)
+        return dict(changetype=changetype, address=address)
 
 
 def read_byte(f):
@@ -402,12 +460,320 @@ def write_value(f, v):
         write_int(f, len(v))
         f.write(v)
 
-# won't work, unless the change from CASSANDRA-4539 is implemented
-#def read_option(f):
-#    optid = read_short(f)
-#    value = read_value(f)
-#    return (optid, value)
-#
-#def write_option(f, optid, value):
-#    write_short(f, optid)
-#    write_value(f, value)
+def read_inet(f):
+    size = read_byte(f)
+    addrbytes = f.read(size)
+    port = read_int(f)
+    if size == 4:
+        addrfam = socket.AF_INET
+    elif size == 16:
+        addrfam = socket.AF_INET6
+    else:
+        raise cql.InternalError("bad inet address: %r" % (addrbytes,))
+    return (socket.inet_ntop(addrfam, addrbytes), port)
+
+def write_inet(f, addrtuple):
+    addr, port = addrtuple
+    if ':' in addr:
+        addrfam = socket.AF_INET6
+    else:
+        addrfam = socket.AF_INET
+    addrbytes = socket.inet_pton(addrfam, addr)
+    write_byte(f, len(addrbytes))
+    f.write(addrbytes)
+    write_int(f, port)
+
+
+class FakeThriftRow:
+    def __init__(self, columns):
+        self.columns = columns
+
+class NativeCursor(Cursor):
+    def prepare_query(self, query):
+        pquery, paramnames = prepare_query(query)
+        prepared = self._connection.wait_for_request(PrepareMessage(query=pquery))
+        if isinstance(prepared, ErrorMessage):
+            raise cql.Error('Query preparation failed: %s' % prepared.summary())
+        if prepared.kind != ResultMessage.KIND_PREPARED:
+            raise cql.InternalError('Query preparation did not result in prepared query')
+        queryid, colspecs = prepared.results
+        kss, cfs, names, ctypes = zip(*colspecs)
+        return PreparedQuery(query, queryid, ctypes, paramnames)
+
+    def get_response(self, query):
+        return self._connection.wait_for_request(QueryMessage(query=query))
+
+    def get_response_prepared(self, prepared_query, params):
+        em = ExecuteMessage(queryid=prepared_query.itemid, queryparams=params)
+        return self._connection.wait_for_request(em)
+
+    def executemany(self, querylist, argslist):
+        pass
+
+    def translate_schema(self, metadata):
+        print "incoming metadata: %r" % (metadata,)
+        pass
+
+    def translate_row(self, row):
+        return FakeThriftRow(row)
+
+    def handle_cql_execution_errors(self, response):
+        if not isinstance(response, ErrorMessage):
+            return
+        try:
+            codemsg = response.error_codes[response.code]
+        except KeyError:
+            codemsg = '(Unknown error code %04x)' % response.code
+        if codemsg == 'Schema disagreement exception':
+            eclass = cql.IntegrityError
+        elif codemsg == 'Authentication error':
+            eclass = cql.NotAuthenticated
+        elif codemsg == ('Unavailable exception', 'Timeout exception'):
+            eclass = cql.OperationalError
+        elif codemsg == 'Request exception':
+            eclass = cql.ProgrammingError
+        else:
+            eclass = cql.InternalError
+        raise eclass('%s: %s' % (codemsg, response.msg))
+
+    error_codes = {
+        0x0000: 'Server error',
+        0x0001: 'Protocol error',
+        0x0002: 'Authentication error',
+        0x0100: 'Unavailable exception',
+        0x0101: 'Timeout exception',
+        0x0102: 'Schema disagreement exception',
+        0x0200: 'Request exception',
+    }
+
+    def process_execution_results(self, response, decoder=None):
+        self.handle_cql_execution_errors(response)
+        if not isinstance(response, ResultMessage):
+            raise cql.InternalError('Query execution resulted in %s!?' % (response,))
+        if response.kind == ResultMessage.KIND_PREPARED:
+            raise cql.InternalError('Query execution resulted in prepared query!?')
+
+        self.rs_idx = 0
+        self.description = None
+        self.result = []
+        self.name_info = ()
+
+        if response.kind == ResultMessage.KIND_VOID:
+            self.description = _VOID_DESCRIPTION
+        elif response.kind == ResultMessage.KIND_SET_KS:
+            self._connection.keyspace_changed(response.results)
+            self.description = _VOID_DESCRIPTION
+        elif response.kind == ResultMessage.KIND_ROWS:
+            schema = self.translate_schema(response.results.column_metadata)
+            self.decoder = (decoder or self.default_decoder)(schema)
+            self.result = map(self.translate_row, response.results.rows)
+            if self.result:
+                self.get_metadata_info(self.result[0])
+        else:
+            raise Exception('unknown response kind %s: %s' % (response.kind, response))
+        self.rowcount = len(self.result)
+
+    def get_compression(self):
+        return None
+
+    def set_compression(self, val):
+        if val is not None:
+            raise NotImplementedError("Setting per-cursor compression is not "
+                                      "supported in NativeCursor.")
+
+    compression = property(get_compression, set_compression)
+
+class debugsock:
+    def __init__(self, sock):
+        self.sock = sock
+
+    def write(self, data):
+        print '[sending %r]' % (data,)
+        self.sock.send(data)
+
+    def read(self, readlen):
+        data = ''
+        while readlen > 0:
+            add = self.sock.recv(readlen)
+            print '[received %r]' % (add,)
+            if add == '':
+                raise cql.InternalError("short read of %s bytes (%s expected)"
+                                        % (len(data), len(data) + readlen))
+            data += add
+            readlen -= len(add)
+        return data
+
+    def close(self):
+        pass
+
+class NativeConnection(Connection):
+    cursorclass = NativeCursor
+
+    def __init__(self, *args, **kwargs):
+        self.make_reqid = itertools.count().next
+        self.responses = {}
+        self.waiting = {}
+        self.conn_ready = False
+        Connection.__init__(self, *args, **kwargs)
+
+    def establish_connection(self):
+        self.conn_ready = False
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((self.host, self.port))
+        #self.socketf = s.makefile(bufsize=0)
+        self.socketf = debugsock(s)
+        self.sockfd = s
+        self.open_socket = True
+        supported = self.wait_for_request(OptionsMessage())
+        self.supported_cql_versions = supported.cql_versions
+        self.supported_compressions = supported.compressions
+
+        if self.cql_version:
+            if self.cql_version not in self.supported_cql_versions:
+                raise ProgrammingError("cql_version %r is not supported by"
+                                       " remote (w/ native protocol). Supported"
+                                       " versions: %r"
+                                       % (self.cql_version, self.supported_cql_versions))
+        else:
+            self.cql_version = self.supported_cql_versions[0]
+
+        opts = {}
+        if self.compression:
+            if self.compression not in self.supported_compressions:
+                raise ProgrammingError("Compression type %r is not supported by"
+                                       " remote. Supported compression types: %r"
+                                       % (self.compression, self.supported_compressions))
+            # XXX: Remove this once snappy compression is supported
+            raise NotImplementedError("CQL driver does not yet support compression")
+            opts[StartupMessage.STARTUP_USE_COMPRESSION] = self.compression
+
+        sm = StartupMessage(cqlversion=self.cql_version, options=opts)
+        startup_response = self.wait_for_request(sm)
+        while True:
+            if isinstance(startup_response, ReadyMessage):
+                self.conn_ready = True
+                break
+            if isinstance(startup_response, AuthenticateMessage):
+                self.authenticator = startup_response.authenticator
+                if self.credentials is None:
+                    raise ProgrammingError('Remote end requires authentication.')
+                cm = CredentialsMessage(creds=self.credentials)
+                startup_response = self.wait_for_request(cm)
+            elif isinstance(startup_response, ErrorMessage):
+                raise ProgrammingError("Server did not accept credentials. %s"
+                                       % startup_response.summary())
+            else:
+                raise cql.InternalError("Unexpected response %r during connection setup"
+                                        % startup_response)
+
+        if self.keyspace:
+            self.set_initial_keyspace(self.keyspace)
+
+    def set_initial_keyspace(self, keyspace):
+        c = self.cursor()
+        c.execute('USE %s' % cql_quote_name(self.keyspace))
+        c.close()
+
+    def terminate_conn(self):
+        self.socketf.close()
+        self.sockfd.close()
+
+    def wait_for_request(self, msg):
+        """
+        Given a message, send it to the server, wait for a response, and
+        return the response.
+        """
+
+        return self.wait_for_requests(msg)[0]
+
+    def wait_for_requests(self, *msgs):
+        """
+        Given any number of message objects, send them all to the server
+        and wait for responses to each one. Once they arrive, return all
+        of the responses in the same order as the messages to which they
+        respond.
+        """
+
+        reqids = []
+        for msg in msgs:
+            reqid = self.make_reqid()
+            reqids.append(reqid)
+            msg.send(self.socketf, reqid)
+        resultdict = self.wait_for_results(*reqids)
+        return [resultdict[reqid] for reqid in reqids]
+
+    def wait_for_results(self, *reqids):
+        """
+        Given any number of stream-ids, wait until responses have arrived for
+        each one, and return a dictionary mapping the stream-ids to the
+        appropriate results.
+        """
+
+        waiting_for = set(reqids)
+        results = {}
+        for r in reqids:
+            try:
+                result = self.responses.pop(r)
+            except KeyError:
+                pass
+            else:
+                results[r] = result
+                waiting_for.remove(r)
+        while waiting_for:
+            newmsg = read_frame(self.socketf)
+            if newmsg.stream_id in waiting_for:
+                results[newmsg.stream_id] = newmsg
+                waiting_for.remove(newmsg.stream_id)
+            else:
+                self.handle_incoming(newmsg)
+        return results
+
+    def wait_for_result(self, reqid):
+        """
+        Given a stream-id, wait until a response arrives with that stream-id,
+        and return the msg.
+        """
+
+        return self.wait_for_results(reqid)[reqid]
+
+    def handle_incoming(self, msg):
+        if msg.stream_id < 0:
+            self.handle_pushed(msg)
+            return
+        try:
+            cb = self.waiting.pop(msg.stream_id)
+        except KeyError:
+            self.responses[msg.stream_id] = msg
+        else:
+            cb(msg)
+
+    def callback_when(self, reqid, cb):
+        """
+        Callback cb with a message object once a message with a stream-id
+        of reqid is received. The callback may be immediate, if a response
+        is already in the received queue.
+
+        Otherwise, note also that the callback may not be called immediately
+        upon the arrival of the response packet; it may have to wait until
+        something else waits on a result.
+        """
+
+        try:
+            msg = self.responses.pop(reqid)
+        except KeyError:
+            pass
+        else:
+            return cb(msg)
+        self.waiting[reqid] = cb
+
+    def request_and_callback(self, msg, cb):
+        """
+        Given a message msg and a callable cb, send the message to the server
+        and call cb with the result once it arrives. Note that the callback
+        may not be called immediately upon the arrival of the response packet;
+        it may have to wait until something else waits on a result.
+        """
+
+        reqid = self.make_reqid()
+        msg.send(self.socketf, reqid)
+        self.callback_when(reqid, cb)
