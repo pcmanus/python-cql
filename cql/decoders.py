@@ -67,7 +67,7 @@ class SchemaDecoder(object):
             column_types = self.decode_metadata_and_types(row)[2]
         for (column, vtype) in zip(row.columns, column_types):
             try:
-                value = vtype.from_binary(column.value or '')
+                value = vtype.from_binary(column.value)
             except Exception, e:
                 value = self.value_decode_error(e, column.name, column.value,
                                                 vtype.cass_parameterized_type(full=True))
