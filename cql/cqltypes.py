@@ -14,6 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""
+Representation of Cassandra data types. These classes should make it simple for
+the library (and caller software) to deal with Cassandra-style Java class type
+names and CQL type specifiers, and convert between them cleanly. Parameterized
+types are fully supported in both flavors. Once you have the right Type object
+for the type you want, you can use it to serialize, deserialize, or retrieve
+the corresponding CQL or Cassandra type strings.
+
+If/when the need arises for interpret types from CQL string literals in
+different ways (for https://issues.apache.org/jira/browse/CASSANDRA-3799,
+for example), these classes would be a good place to tack on
+.from_cql_literal() and .as_cql_literal() classmethods (or whatever).
+"""
+
 from cql.apivalues import Binary, UUID
 from cql.marshal import (int8_pack, int8_unpack, uint16_pack, uint16_unpack,
                          int32_pack, int32_unpack, int64_pack, int64_unpack,
@@ -43,6 +57,16 @@ _casstypes = {}
 _cqltypes = {}
 
 class CassandraTypeType(type):
+    """
+    The CassandraType objects in this module will normally be used directly,
+    rather than through instances of those types. They can be instantiated,
+    of course, but the type information is what this driver mainly needs.
+
+    This metaclass registers CassandraType classes in the global
+    by-cassandra-typename and by-cql-typename registries, unless their class
+    name starts with an underscore.
+    """
+
     def __new__(metacls, name, bases, dct):
         dct.setdefault('cassname', name)
         cls = type.__new__(metacls, name, bases, dct)
@@ -58,6 +82,16 @@ casstype_scanner = re.Scanner((
 ))
 
 def lookup_casstype_simple(casstype):
+    """
+    Given a Cassandra type name (either fully distinguished or not), hand
+    back the CassandraType class responsible for it. If a name is not
+    recognized, a custom _UnrecognizedType subclass will be created for it.
+
+    This function does not handle complex types (so no type parameters--
+    nothing with parentheses). Use lookup_casstype() instead if you might need
+    that.
+    """
+
     shortname = trim_if_startswith(casstype, apache_cassandra_type_prefix)
     try:
         typeclass = _casstypes[shortname]
@@ -90,12 +124,38 @@ def parse_casstype_args(typestring):
     return args[0][0]
 
 def lookup_casstype(casstype):
+    """
+    Given a Cassandra type as a string (possibly including parameters), hand
+    back the CassandraType class responsible for it. If a name is not
+    recognized, a custom _UnrecognizedType subclass will be created for it.
+
+    Example:
+
+        >>> lookup_casstype('org.apache.cassandra.db.marshal.MapType(org.apache.cassandra.db.marshal.UTF8Type,org.apache.cassandra.db.marshal.Int32Type)')
+        <class 'cql.cqltypes.MapType(UTF8Type, Int32Type)'>
+
+    """
+
     try:
         return parse_casstype_args(casstype)
     except (ValueError, AssertionError, IndexError), e:
         raise ValueError("Don't know how to parse type string %r: %s" % (casstype, e))
 
 def lookup_cqltype(cqltype):
+    """
+    Given a CQL type specifier, possibly including parameters, hand back the
+    CassandraType class responsible for it. If a name is not recognized,
+    KeyError is raised. If the type specifier looks like a CQL string literal
+    (starts and ends with a single quote character "'"), then it is interpreted
+    as a Cassandra type name, and looked up accordingly.
+
+    Example:
+
+        >>> lookup_cqltype('map<text, int>')
+        <class 'cql.cqltypes.MapType(UTF8Type, Int32Type)'>
+
+    """
+
     args = ()
     if cqltype.startswith("'") and cqltype.endswith("'"):
         return lookup_casstype(cqltype[1:-1].replace("''", "'"))
@@ -125,10 +185,22 @@ class _CassandraType(object):
 
     @staticmethod
     def validate(val):
+        """
+        Called to transform an input value into one of a suitable type
+        for this class. As an example, the BooleanType class uses this
+        to convert an incoming value to True or False.
+        """
+
         return val
 
     @classmethod
     def from_binary(cls, byts):
+        """
+        Deserialize a bytestring into a value. See the deserialize() method
+        for more information. This method differs in that if None or the empty
+        string is passed in, None may be returned.
+        """
+
         if byts is None:
             return None
         if byts == '' and not cls.empty_binary_ok:
@@ -137,20 +209,53 @@ class _CassandraType(object):
 
     @classmethod
     def to_binary(cls, val):
+        """
+        Serialize a value into a bytestring. See the serialize() method for
+        more information. This method differs in that if None is passed in,
+        the result is the empty string.
+        """
+
         if val is None:
             return ''
         return cls.serialize(val)
 
     @staticmethod
     def deserialize(byts):
+        """
+        Given a bytestring, deserialize into a value according to the protocol
+        for this type. Note that this does not create a new instance of this
+        class; it merely gives back a value that would be appropriate to go
+        inside an instance of this class.
+        """
         return byts
 
     @staticmethod
     def serialize(val):
+        """
+        Given a value appropriate for this class, serialize it according to the
+        protocol for this type and return the corresponding bytestring.
+        """
         return val
 
     @classmethod
     def cass_parameterized_type_with(cls, subtypes, full=False):
+        """
+        Return the name of this type as it would be expressed by Cassandra,
+        optionally fully qualified. If subtypes is not None, it is expected
+        to be a list of other CassandraType subclasses, and the output
+        string includes the Cassandra names for those subclasses as well,
+        as parameters to this one.
+
+        Example:
+
+            >>> LongType.cass_parameterized_type_with(())
+            'LongType'
+            >>> LongType.cass_parameterized_type_with((), full=True)
+            'org.apache.cassandra.db.marshal.LongType'
+            >>> SetType.cass_parameterized_type_with([DecimalType], full=True)
+            'org.apache.cassandra.db.marshal.SetType(org.apache.cassandra.db.marshal.DecimalType)' 
+        """
+
         cname = cls.cassname
         if full and '.' not in cname:
             cname = apache_cassandra_type_prefix + cname
@@ -161,6 +266,14 @@ class _CassandraType(object):
 
     @classmethod
     def apply_parameters(cls, *subtypes):
+        """
+        Given a set of other CassandraTypes, create a new subtype of this type
+        using them as parameters. This is how composite types are constructed.
+
+            >>> MapType.apply_parameters(DateType, BooleanType)
+            <class 'cql.cqltypes.MapType(DateType, BooleanType)'>
+        """
+
         if cls.num_subtypes != 'UNKNOWN' and len(subtypes) != cls.num_subtypes:
             raise ValueError("%s types require %d subtypes (%d given)"
                              % (cls.typename, cls.num_subtypes, len(subtypes)))
@@ -169,12 +282,21 @@ class _CassandraType(object):
 
     @classmethod
     def cql_parameterized_type(cls):
+        """
+        Return a CQL type specifier for this type. If this type has parameters,
+        they are included in standard CQL <> notation.
+        """
+
         if not cls.subtypes:
             return cls.typename
         return '%s<%s>' % (cls.typename, ', '.join(styp.cql_parameterized_type() for styp in cls.subtypes))
 
     @classmethod
     def cass_parameterized_type(cls, full=False):
+        """
+        Return a Cassandra type specifier for this type. If this type has
+        parameters, they are included in the standard () notation.
+        """
         return cls.cass_parameterized_type_with(cls.subtypes, full=full)
 
 # it's initially named with a _ to avoid registering it as a real type, but
@@ -472,6 +594,11 @@ class CompositeType(_ParameterizedType):
     num_subtypes = 'UNKNOWN'
 
 class ColumnToCollectionType(_ParameterizedType):
+    """
+    This class only really exists so that we can cleanly evaluate types when
+    Cassandra includes this. We don't actually need or want the extra
+    information.
+    """
     typename = "'org.apache.cassandra.db.marshal.ColumnToCollectionType'"
     num_subtypes = 1
 
@@ -486,4 +613,14 @@ apache_class_to_cql_type = dict([(n, t.typename) for (n, t) in _casstypes.items(
 cql_types = sorted(_cqltypes.keys())
 
 def cql_typename(casstypename):
+    """
+    Translate a Cassandra-style type specifier (optionally-fully-distinguished
+    Java class names for data types, along with optional parameters) into a
+    CQL-style type specifier.
+
+        >>> cql_typename('DateType')
+        'timestamp'
+        >>> cql_typename('org.apache.cassandra.db.marshal.ListType(IntegerType)')
+        'list<varint>'
+    """
     return lookup_casstype(casstypename).cql_parameterized_type()
