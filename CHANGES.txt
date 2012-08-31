@@ -1,3 +1,11 @@
+1.1.0 - 2012/08/30
+ * Support for CQL3 collections
+ * Unified type handling
+ * Add .column_types attribute to Cursor objects, which stores a list
+   of CassandraType objects corresponding to the types of the data
+   from .fetchone(). Use hasattr(cursor, 'supports_column_types') to
+   tell whether you're using a version of this library with that support.
+
 1.0.10 - 2012/03/26
  * Expose column name storage types
  * Fix terrible performance issue for large CQL queries
