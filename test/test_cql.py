@@ -185,6 +185,9 @@ class TestCql(unittest.TestCase):
     def get_partitioner(self):
         return thrift_client.describe_partitioner()
 
+    def assertIsSubclass(self, class_a, class_b):
+        assert issubclass(class_a, class_b), '%r is not a subclass of %r' % (class_a, class_b)
+
         
     def test_select_simple(self):
         "single-row named column queries"
@@ -647,7 +650,7 @@ class TestCql(unittest.TestCase):
                           "CREATE INDEX ON CreateIndex1 (stuff)")
 
     def test_drop_indexes(self):
-        "droping indexes on columns"
+        "dropping indexes on columns"
         cursor = self.cursor
         ksname = self.make_keyspace_name('DropIndexTests')
         cursor.execute("""CREATE KEYSPACE :ks WITH strategy_options:replication_factor = '1'
