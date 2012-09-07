@@ -349,21 +349,13 @@ class ExecuteMessage(_MessageType):
         for param in self.queryparams:
             write_value(f, param)
 
-class ModeChangeMessage(_MessageType):
-    opcode = 0x0B
-    name = 'MODE_CHANGE'
-    params = ('is_control',)
-
-    def send_body(self, f):
-        write_byte(f, bool(self.is_control))
-
 known_event_types = frozenset((
-    'topology_change',
-    'status_change',
+    'TOPOLOGY_CHANGE',
+    'STATUS_CHANGE',
 ))
 
 class RegisterMessage(_MessageType):
-    opcode = 0x0C
+    opcode = 0x0B
     name = 'REGISTER'
     params = ('eventlist',)
 
@@ -371,28 +363,28 @@ class RegisterMessage(_MessageType):
         write_stringlist(f, self.eventlist)
 
 class EventMessage(_MessageType):
-    opcode = 0x0D
+    opcode = 0x0C
     name = 'EVENT'
     params = ('eventtype', 'eventargs')
 
     @classmethod
     def recv_body(cls, f):
-        eventtype = read_string(f).lower()
+        eventtype = read_string(f).upper()
         if eventtype in known_event_types:
-            readmethod = getattr(cls, 'recv_' + eventtype)
+            readmethod = getattr(cls, 'recv_' + eventtype.lower())
             return cls(eventtype=eventtype, eventargs=readmethod(f))
         raise cql.NotSupportedError('Unknown event type %r' % eventtype)
 
     @classmethod
     def recv_topology_change(cls, f):
-        # "new_node" or "removed_node"
+        # "NEW_NODE" or "REMOVED_NODE"
         changetype = read_string(f)
         address = read_inet(f)
         return dict(changetype=changetype, address=address)
 
     @classmethod
     def recv_status_change(cls, f):
-        # "up" or "down"
+        # "UP" or "DOWN"
         changetype = read_string(f)
         address = read_inet(f)
         return dict(changetype=changetype, address=address)
