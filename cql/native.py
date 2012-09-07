@@ -153,23 +153,15 @@ class StartupMessage(_MessageType):
     name = 'STARTUP'
     params = ('cqlversion', 'options')
 
-    STARTUP_USE_COMPRESSION = 0x0001
+    KNOWN_OPTION_KEYS = set((
+        'CQL_VERSION',
+        'COMPRESSION',
+    ))
 
     def send_body(self, f):
-        if isinstance(self.options, dict):
-            self.options = self.options.items()
-        write_string(f, self.cqlversion)
-        write_short(f, len(self.options))
-        for key, value in self.options:
-            write_short(f, key)
-            if key == STARTUP_USE_COMPRESSION:
-                write_string(f, value)
-            elif isinstance(value, str): # not unicode
-                # should be a safe guess
-                write_string(f, value)
-            else:
-                raise NotImplementedError("Startup option 0x%04x not known; can't send "
-                                          "value to server" % key)
+        optmap = self.options.copy()
+        optmap['CQL_VERSION'] = self.cqlversion
+        write_stringmap(f, optmap)
 
 class ReadyMessage(_MessageType):
     opcode = 0x02
@@ -212,13 +204,13 @@ class OptionsMessage(_MessageType):
 class SupportedMessage(_MessageType):
     opcode = 0x06
     name = 'SUPPORTED'
-    params = ('cql_versions', 'compressions')
+    params = ('cqlversions', 'options',)
 
     @classmethod
     def recv_body(cls, f):
-        cqlvers = read_stringlist(f)
-        compressions = read_stringlist(f)
-        return cls(cql_versions=cqlvers, compressions=compressions)
+        options = read_stringmultimap(f)
+        cqlversions = options.pop('CQL_VERSION')
+        return cls(cqlversions=cqlversions, options=options)
 
 class QueryMessage(_MessageType):
     opcode = 0x07
@@ -439,6 +431,34 @@ def write_stringlist(f, stringlist):
     for s in stringlist:
         write_string(f, s)
 
+def read_stringmap(f):
+    numpairs = read_short(f)
+    strmap = {}
+    for x in xrange(numpairs):
+        k = read_string(f)
+        strmap[k] = read_string(f)
+    return strmap
+
+def write_stringmap(f, strmap):
+    write_short(f, len(strmap))
+    for k, v in strmap.items():
+        write_string(f, k)
+        write_string(f, v)
+
+def read_stringmultimap(f):
+    numkeys = read_short(f)
+    strmmap = {}
+    for x in xrange(numkeys):
+        k = read_string(f)
+        strmmap[k] = read_stringlist(f)
+    return strmmap
+
+def write_stringmultimap(f, strmmap):
+    write_short(f, len(strmmap))
+    for k, v in strmmap.items():
+        write_string(f, k)
+        write_stringlist(f, v)
+
 def read_value(f):
     size = read_int(f)
     if size < 0:
@@ -617,8 +637,8 @@ class NativeConnection(Connection):
         self.sockfd = s
         self.open_socket = True
         supported = self.wait_for_request(OptionsMessage())
-        self.supported_cql_versions = supported.cql_versions
-        self.supported_compressions = supported.compressions
+        self.supported_cql_versions = supported.cqlversions
+        self.supported_compressions = supported.options['COMPRESSION']
 
         if self.cql_version:
             if self.cql_version not in self.supported_cql_versions:
@@ -635,9 +655,9 @@ class NativeConnection(Connection):
                 raise ProgrammingError("Compression type %r is not supported by"
                                        " remote. Supported compression types: %r"
                                        % (self.compression, self.supported_compressions))
-            # XXX: Remove this once snappy compression is supported
+            # XXX: Remove this once some compressions are supported
             raise NotImplementedError("CQL driver does not yet support compression")
-            opts[StartupMessage.STARTUP_USE_COMPRESSION] = self.compression
+            opts['COMPRESSION'] = self.compression
 
         sm = StartupMessage(cqlversion=self.cql_version, options=opts)
         startup_response = self.wait_for_request(sm)
