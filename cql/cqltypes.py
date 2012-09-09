@@ -35,6 +35,7 @@ from cql.marshal import (int8_pack, int8_unpack, uint16_pack, uint16_unpack,
                          varint_pack, varint_unpack)
 from decimal import Decimal
 import time
+import socket
 import calendar
 import re
 
@@ -405,6 +406,25 @@ class IntegerType(_CassandraType):
 
     deserialize = staticmethod(varint_unpack)
     serialize = staticmethod(varint_pack)
+
+class InetAddressType(_CassandraType):
+    typename = 'inet'
+
+    @staticmethod
+    def deserialize(byts):
+        if len(byts) == 16:
+            fam = socket.AF_INET6
+        else:
+            fam = socket.AF_INET
+        return socket.inet_ntop(fam, byts)
+
+    @staticmethod
+    def serialize(addr):
+        if ':' in addr:
+            fam = socket.AF_INET6
+        else:
+            fam = socket.AF_INET
+        return socket.inet_pton(fam, addr)
 
 class CounterColumnType(_CassandraType):
     typename = 'counter'
