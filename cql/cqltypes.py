@@ -622,6 +622,20 @@ class ColumnToCollectionType(_ParameterizedType):
     typename = "'org.apache.cassandra.db.marshal.ColumnToCollectionType'"
     num_subtypes = 1
 
+class ReversedType(_ParameterizedType):
+    typename = "'org.apache.cassandra.db.marshal.ReversedType'"
+    num_subtypes = 1
+
+    @classmethod
+    def deserialize_safe(cls, byts):
+        subtype, = cls.subtypes
+        return subtype.from_binary(byts)
+
+    @classmethod
+    def serialize_safe(cls, val):
+        subtype, = cls.subtypes
+        return subtype.to_binary(val)
+
 def is_counter_type(t):
     if isinstance(t, basestring):
         t = lookup_casstype(t)
