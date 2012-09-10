@@ -119,34 +119,128 @@ def read_frame(f):
     msg.stream_id = stream
     return msg
 
+error_classes = {}
+
 class ErrorMessage(_MessageType):
     opcode = 0x00
     name = 'ERROR'
-    params = ('code', 'message')
-
-    error_codes = {
-        0x0000: 'Server error',
-        0x0001: 'Protocol error',
-        0x0002: 'Authentication error',
-        0x0100: 'Unavailable exception',
-        0x0101: 'Timeout exception',
-        0x0102: 'Schema disagreement exception',
-        0x0200: 'Request exception',
-    }
+    params = ('code', 'message', 'info')
+    summary = 'Unknown'
 
     @classmethod
     def recv_body(cls, f):
         code = read_int(f)
         msg = read_string(f)
-        return cls(code=code, message=msg)
+        subcls = error_classes.get(code, cls)
+        extra_info = subcls.recv_error_info(f)
+        return subcls(code=code, message=msg, info=extra_info)
 
-    def summary(self):
-        return 'code=%04x [%s] message=%r' \
-               % (self.code, self.error_codes.get(self.code, '(Unknown)'), self.message)
+    def summarymsg(self):
+        msg = 'code=%04x [%s] message="%s"' \
+              % (self.code, self.summary, self.message)
+        if self.info is not None:
+            msg += (' ' + self.info)
+        return msg
 
     def __str__(self):
-        return '<ErrorMessage %s>' % self.summary()
+        return '<ErrorMessage %s>' % self.summarymsg()
     __repr__ = __str__
+
+    @staticmethod
+    def recv_error_info(f):
+        pass
+
+class ErrorMessageSubclass(_register_msg_type):
+    def __init__(cls, name, bases, dct):
+        if not name.startswith('_'):
+            error_classes[cls.errorcode] = cls
+
+class _ErrorMessageSub(ErrorMessage):
+    __metaclass__ = ErrorMessageSubclass
+
+class ServerErrorMessage(_ErrorMessageSub):
+    summary = 'Server error'
+    errorcode = 0x0000
+
+class ProtocolErrorMessage(_ErrorMessageSub):
+    summary = 'Protocol error'
+    errorcode = 0x000A
+
+class UnavailableExceptionErrorMessage(_ErrorMessageSub):
+    summary = 'Unavailable exception'
+    errorcode = 0x1000
+
+    @staticmethod
+    def recv_error_info(f):
+        return {
+            'consistencylevel': read_string(f),
+            'required': read_int(f),
+            'alive': read_int(f),
+        }
+
+class OverloadedErrorMessage(_ErrorMessageSub):
+    summary = 'Coordinator node overloaded'
+    errorcode = 0x1001
+
+class IsBootstrappingErrorMessage(_ErrorMessageSub):
+    summary = 'Coordinator node is bootstrapping'
+    errorcode = 0x1002
+
+class TruncateErrorMessage(_ErrorMessageSub):
+    summary = 'Error during truncate'
+    errorcode = 0x1003
+
+class WriteTimeoutErrorMessage(_ErrorMessageSub):
+    summary = 'Timeout during write request'
+    errorcode = 0x1100
+
+    @staticmethod
+    def recv_error_info(f):
+        return {
+            'consistencylevel': read_string(f),
+            'received': read_int(f),
+            'blockfor': read_int(f),
+        }
+
+class ReadTimeoutErrorMessage(_ErrorMessageSub):
+    summary = 'Timeout during read request'
+    errorcode = 0x1200
+
+    @staticmethod
+    def recv_error_info(f):
+        return {
+            'consistencylevel': read_string(f),
+            'received': read_int(f),
+            'blockfor': read_int(f),
+            'data_present': bool(read_byte(f)),
+        }
+
+class SyntaxErrorErrorMessage(_ErrorMessageSub):
+    summary = 'Syntax error in CQL query'
+    errorcode = 0x2000
+
+class UnauthorizedErrorMessage(_ErrorMessageSub):
+    summary = 'Unauthorized'
+    errorcode = 0x2100
+
+class InvalidQueryErrorMessage(_ErrorMessageSub):
+    summary = 'Invalid query'
+    errorcode = 0x2200
+
+class BadConfigErrorMessage(_ErrorMessageSub):
+    summary = 'Query invalid because of configuration issue'
+    errorcode = 0x2300
+
+class AlreadyExistsErrorMessage(_ErrorMessageSub):
+    summary = 'Item already exists'
+    errorcode = 0x2400
+
+    @staticmethod
+    def recv_error_info(f):
+        return {
+            'keyspace': read_string(f),
+            'table': read_string(f),
+        }
 
 class StartupMessage(_MessageType):
     opcode = 0x01
@@ -505,7 +599,7 @@ class NativeCursor(Cursor):
         pquery, paramnames = prepare_query(query)
         prepared = self._connection.wait_for_request(PrepareMessage(query=pquery))
         if isinstance(prepared, ErrorMessage):
-            raise cql.Error('Query preparation failed: %s' % prepared.summary())
+            raise cql.Error('Query preparation failed: %s' % prepared.summarymsg())
         if prepared.kind != ResultMessage.KIND_PREPARED:
             raise cql.InternalError('Query preparation did not result in prepared query')
         queryid, colspecs = prepared.results
@@ -673,7 +767,7 @@ class NativeConnection(Connection):
                 startup_response = self.wait_for_request(cm)
             elif isinstance(startup_response, ErrorMessage):
                 raise ProgrammingError("Server did not accept credentials. %s"
-                                       % startup_response.summary())
+                                       % startup_response.summarymsg())
             else:
                 raise cql.InternalError("Unexpected response %r during connection setup"
                                         % startup_response)
