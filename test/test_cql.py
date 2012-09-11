@@ -19,7 +19,7 @@
 # PYTHONPATH=test nosetests --tests=test_cql:TestCql.test_column_count
 
 # Note that some tests will be skipped if run against a cluster with
-# RandomPartitioner.
+# random partitioning semantics.
 
 # to configure behavior, define $CQL_TEST_HOST to the destination address
 # for Thrift connections, and $CQL_TEST_PORT to the associated port.
@@ -41,6 +41,8 @@ sys.path.append(join(abspath(dirname(__file__)), '..'))
 import cql
 from cql.cassandra import Cassandra
 from cql.cqltypes import AsciiType, UUIDType
+
+RANDOM_PARTITIONERS = ('RandomPartitioner', 'Murmur3Partitioner')
 
 def get_thrift_client(host=TEST_HOST, port=TEST_PORT):
     socket = TSocket.TSocket(host, port)
@@ -188,6 +190,15 @@ class TestCql(unittest.TestCase):
     def assertIsSubclass(self, class_a, class_b):
         assert issubclass(class_a, class_b), '%r is not a subclass of %r' % (class_a, class_b)
 
+    def check_ordered_partitioner(self, msg="Key ranges don't make sense under RP"):
+        if self.get_partitioner().split('.')[-1] in RANDOM_PARTITIONERS:
+            # skipTest is Python >= 2.7
+            if hasattr(self, 'skipTest'):
+                self.skipTest(msg)
+            return False
+        return True
+
+
         
     def test_select_simple(self):
         "single-row named column queries"
@@ -217,12 +228,8 @@ class TestCql(unittest.TestCase):
     def test_select_row_range(self):
         "retrieve a range of rows with columns"
 
-        if self.get_partitioner().split('.')[-1] == 'RandomPartitioner':
-            # skipTest is >= Python 2.7
-            if hasattr(self, 'skipTest'):
-                self.skipTest("Key ranges don't make sense under RP")
-            else: return None
-
+        if not self.check_ordered_partitioner():
+            return
         # everything
         cursor = self.cursor
         cursor.execute("SELECT * FROM StandardLongA")
@@ -381,12 +388,8 @@ class TestCql(unittest.TestCase):
     def test_index_scan_with_start_key(self):
         "indexed scan with a starting key"
 
-        if self.get_partitioner().split('.')[-1] == 'RandomPartitioner':
-            # skipTest is Python >= 2.7
-            if hasattr(self, 'skipTest'):
-                self.skipTest("Key ranges don't make sense under RP")
-            else: return None
-
+        if not self.check_ordered_partitioner():
+            return
         cursor = self.cursor
         cursor.execute("""
             SELECT KEY, 'birthdate' FROM IndexedA 
@@ -398,6 +401,9 @@ class TestCql(unittest.TestCase):
 
     def test_no_where_clause(self):
         "empty where clause (range query w/o start key)"
+
+        if not self.check_ordered_partitioner():
+            return
         cursor = self.cursor
         cursor.execute("SELECT KEY, 'col' FROM StandardString1 LIMIT 3")
         self.assertEqual(cursor.rowcount, 3)
