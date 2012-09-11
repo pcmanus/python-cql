@@ -91,6 +91,6 @@ def connect(host, port=9160, keyspace=None, user=None, password=None,
         from native import NativeConnection
         connclass = NativeConnection
     else:
-        from thriftconnection import ThriftConnection
+        from thrifteries import ThriftConnection
         connclass = ThriftConnection
     return connclass(host, port, keyspace, user, password, cql_version)

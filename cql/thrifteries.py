@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import zlib
+import cql
 from cql.cursor import Cursor, _VOID_DESCRIPTION, _COUNT_DESCRIPTION
 from cql.query import cql_quote, cql_quote_name, prepare_query, PreparedQuery
 from cql.connection import Connection
@@ -41,7 +42,7 @@ class ThriftCursor(Cursor):
             compressed_q = zlib.compress(querytext)
         else:
             compressed_q = querytext
-        req_compression = getattr(Compression, self.compression)
+        req_compression = getattr(Compression, self.compression or 'NONE')
         return compressed_q, req_compression
 
     def prepare_query(self, query):
@@ -85,7 +86,7 @@ class ThriftCursor(Cursor):
     def process_execution_results(self, response, decoder=None):
         if response.type == CqlResultType.ROWS:
             self.decoder = (decoder or self.default_decoder)(response.schema)
-            self.result = response.rows
+            self.result = [r.columns for r in response.rows]
             self.rs_idx = 0
             self.rowcount = len(self.result)
             if self.result:
@@ -124,11 +125,11 @@ class ThriftConnection(Connection):
 
         self.remote_thrift_version = tuple(map(int, self.client.describe_version().split('.')))
 
-        if cql_version:
-            self.set_cql_version(cql_version)
+        if self.cql_version:
+            self.set_cql_version(self.cql_version)
 
-        if keyspace:
-            self.set_initial_keyspace(keyspace)
+        if self.keyspace:
+            self.set_initial_keyspace(self.keyspace)
 
     def set_cql_version(self, cql_version):
         self.client.set_cql_version(cql_version)
