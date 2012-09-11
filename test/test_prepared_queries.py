@@ -31,6 +31,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 import cql
 
+MIN_THRIFT_FOR_CQL_3_0_0_FINAL = (19, 33, 0)
 
 class TestPreparedQueries(unittest.TestCase):
     cursor = None
@@ -57,10 +58,15 @@ class TestPreparedQueries(unittest.TestCase):
 
     def create_schema(self):
         ksname = 'CqlDriverTest_%d' % random.randrange(0x100000000)
-        self.cursor.execute("""create keyspace %s
-                                 with strategy_class='SimpleStrategy'
-                                 and strategy_options:replication_factor=1"""
-                            % ksname)
+        if self.dbconn.remote_thrift_version >= MIN_THRIFT_FOR_CQL_3_0_0_FINAL:
+            create_ks = """create keyspace %s
+                             with replication = {'class': 'SimpleStrategy',
+                                                 'replication_factor': 1};"""
+        else:
+            create_ks = """create keyspace %s
+                             with strategy_class='SimpleStrategy'
+                             and strategy_options:replication_factor=1"""
+        self.cursor.execute(create_ks % ksname)
         self.cursor.execute('use %s' % ksname)
         self.cursor.execute("""create columnfamily abc (thekey timestamp primary key,
                                                         theint int,
