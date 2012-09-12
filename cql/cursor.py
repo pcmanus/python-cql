@@ -69,6 +69,8 @@ class Cursor:
                                        "%s not given for %r" % (e, query))
 
     def execute(self, cql_query, params={}, decoder=None):
+        # note that 'decoder' here is actually the decoder class, not the
+        # instance to be used for decoding. bad naming, but it's in use now.
         if isinstance(cql_query, unicode):
             raise ValueError("CQL query must be bytes, not unicode")
         self.pre_execution_setup()
@@ -77,13 +79,32 @@ class Cursor:
         return self.process_execution_results(response, decoder=decoder)
 
     def execute_prepared(self, prepared_query, params={}, decoder=None):
+        # note that 'decoder' here is actually the decoder class, not the
+        # instance to be used for decoding. bad naming, but it's in use now.
         self.pre_execution_setup()
         response = self.get_response_prepared(prepared_query, params)
         return self.process_execution_results(response, decoder=decoder)
 
     def get_metadata_info(self, row):
-        self.description, self.name_info, self.column_types = \
-                self.decoder.decode_metadata_and_types(row)
+        self.description = description = []
+        self.name_info = name_info = []
+        self.column_types = column_types = []
+        for colid in self.columninfo(row):
+            name, nbytes, vtype, ctype = self.get_column_metadata(colid)
+            column_types.append(vtype)
+            description.append((name, vtype.cass_parameterized_type(),
+                                None, None, None, None, True))
+            name_info.append((nbytes, ctype))
+
+    def get_column_metadata(self, column_id):
+        return self.decoder.decode_metadata_and_type(column_id)
+
+    def decode_row(self, row):
+        values = []
+        bytevals = self.columnvalues(row)
+        for val, vtype, nameinfo in zip(bytevals, self.column_types, self.name_info):
+            values.append(self.decoder.decode_value(val, vtype, nameinfo[0]))
+        return values
 
     def fetchone(self):
         self.__checksock()
@@ -98,7 +119,7 @@ class Cursor:
             if self.cql_major_version < 3:
                 # (don't bother redecoding descriptions or names otherwise)
                 self.get_metadata_info(row)
-            return self.decoder.decode_row(row, self.column_types)
+            return self.decode_row(row)
 
     def fetchmany(self, size=None):
         self.__checksock()
@@ -109,7 +130,7 @@ class Cursor:
         while len(L) < size and self.rs_idx < len(self.result):
             row = self.result[self.rs_idx]
             self.rs_idx += 1
-            L.append(self.decoder.decode_row(row, self.column_types))
+            L.append(self.decode_row(row))
         return L
 
     def fetchall(self):

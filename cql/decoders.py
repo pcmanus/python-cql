@@ -32,47 +32,28 @@ class SchemaDecoder(object):
         raise ProgrammingError("value %r (in col %r) can't be deserialized as %s: %s"
                                % (valuebytes, namebytes, expectedtype, err))
 
-    def decode_description(self, row):
-        return self.decode_metadata(row)[0]
-
-    def decode_metadata(self, row):
-        return self.decode_metadata_and_types(row)[:2]
-
-    def decode_metadata_and_types(self, row):
+    def decode_metadata_and_type(self, namebytes):
         schema = self.schema
-        description = []
-        column_types = []
-        name_info = []
-        for column in row.columns:
-            namebytes = column.name
-            comparator = schema.name_types.get(namebytes, schema.default_name_type)
-            comptype = cqltypes.lookup_casstype(comparator)
-            validator = schema.value_types.get(namebytes, schema.default_value_type)
-            valdtype = cqltypes.lookup_casstype(validator)
+        comparator = schema.name_types.get(namebytes, schema.default_name_type)
+        comptype = cqltypes.lookup_casstype(comparator)
+        validator = schema.value_types.get(namebytes, schema.default_value_type)
+        valdtype = cqltypes.lookup_casstype(validator)
 
-            try:
-                name = comptype.from_binary(namebytes)
-            except Exception, e:
-                name = self.name_decode_error(e, namebytes, comparator)
-            column_types.append(valdtype)
-            description.append((name, validator, None, None, None, None, True))
-            name_info.append((namebytes, comptype))
+        try:
+            name = comptype.from_binary(namebytes)
+        except Exception, e:
+            name = self.name_decode_error(e, namebytes, comptype.cql_parameterized_type())
 
-        return description, name_info, column_types
+        return name, namebytes, valdtype, comptype
 
-    def decode_row(self, row, column_types=None):
-        values = []
-        if column_types is None:
-            column_types = self.decode_metadata_and_types(row)[2]
-        for (column, vtype) in zip(row.columns, column_types):
-            try:
-                value = vtype.from_binary(column.value)
-            except Exception, e:
-                value = self.value_decode_error(e, column.name, column.value,
-                                                vtype.cass_parameterized_type(full=True))
-            values.append(value)
+    def decode_value(self, valbytes, vtype, colname):
+        try:
+            value = vtype.from_binary(valbytes)
+        except Exception, e:
+            value = self.value_decode_error(e, colname, valbytes,
+                                            vtype.cql_parameterized_type())
+        return value
 
-        return values
-
-    def decode_metadata_and_types_native(self, row):
-        pass
+    def decode_metadata_and_type_native(self, colid):
+        ks, cf, colname, vtype = self.schema[colid]
+        return colname, colname, vtype, 'UTF8Type'

@@ -110,6 +110,12 @@ class ThriftCursor(Cursor):
         # 'Return values are not defined.'
         return True
 
+    def columnvalues(self, row):
+        return [column.value for column in row]
+
+    def columninfo(self, row):
+        return (column.name for column in row)
+
 class ThriftConnection(Connection):
     cursorclass = ThriftCursor
 
@@ -121,7 +127,7 @@ class ThriftConnection(Connection):
         socket.open()
 
         if self.credentials:
-            self.client.login(AuthenticationRequest(credentials=credentials))
+            self.client.login(AuthenticationRequest(credentials=self.credentials))
 
         self.remote_thrift_version = tuple(map(int, self.client.describe_version().split('.')))
 
@@ -147,5 +153,5 @@ class ThriftConnection(Connection):
         c.execute('USE %s' % ksname)
         c.close()
 
-    def terminate_conn(self):
-        transport.close()
+    def terminate_connection(self):
+        self.transport.close()

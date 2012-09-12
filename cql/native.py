@@ -590,10 +590,6 @@ def write_inet(f, addrtuple):
     write_int(f, port)
 
 
-class FakeThriftRow:
-    def __init__(self, columns):
-        self.columns = columns
-
 class NativeCursor(Cursor):
     def prepare_query(self, query):
         pquery, paramnames = prepare_query(query)
@@ -616,12 +612,14 @@ class NativeCursor(Cursor):
     def executemany(self, querylist, argslist):
         pass
 
-    def translate_schema(self, metadata):
-        print "incoming metadata: %r" % (metadata,)
-        pass
+    def get_column_metadata(self, column_id):
+        return self.decoder.decode_metadata_and_type_native(column_id)
 
-    def translate_row(self, row):
-        return FakeThriftRow(row)
+    def columninfo(self, row):
+        return xrange(len(row))
+
+    def columnvalues(self, row):
+        return row
 
     def handle_cql_execution_errors(self, response):
         if not isinstance(response, ErrorMessage):
@@ -670,9 +668,9 @@ class NativeCursor(Cursor):
             self._connection.keyspace_changed(response.results)
             self.description = _VOID_DESCRIPTION
         elif response.kind == ResultMessage.KIND_ROWS:
-            schema = self.translate_schema(response.results.column_metadata)
+            schema = response.results.column_metadata
             self.decoder = (decoder or self.default_decoder)(schema)
-            self.result = map(self.translate_row, response.results.rows)
+            self.result = response.results.rows
             if self.result:
                 self.get_metadata_info(self.result[0])
         else:
@@ -780,7 +778,7 @@ class NativeConnection(Connection):
         c.execute('USE %s' % cql_quote_name(self.keyspace))
         c.close()
 
-    def terminate_conn(self):
+    def terminate_connection(self):
         self.socketf.close()
         self.sockfd.close()
 

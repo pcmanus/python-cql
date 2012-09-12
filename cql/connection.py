@@ -81,9 +81,6 @@ class Connection(object):
         curs.compression = self.compression
         return curs
 
-class NativeConnection(Connection):
-    pass
-
 # TODO: Pull connections out of a pool instead.
 def connect(host, port=9160, keyspace=None, user=None, password=None,
             cql_version=None, native=False):
