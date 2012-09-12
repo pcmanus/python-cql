@@ -1,3 +1,13 @@
+1.2.0 - 2012/09/12
+ * Changes to SchemaDecoder interface- now decodes one value or column
+   metadata instance at a time
+ * Beta support for Cassandra's thriftless binary protocol- thrift is
+   wholly unneeded if you pass native=True to cql.connect(). Everything
+   should work exactly the same except for a different call is made to
+   get metadata from the SchemaDecoder, in case you have a custom one.
+ * Support for inet CQL type
+ * Support for parsing and processing data of type ReversedType(whatever)
+
 1.1.0 - 2012/08/30
  * Support for CQL3 collections
  * Unified type handling
