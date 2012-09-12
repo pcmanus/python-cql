@@ -648,7 +648,7 @@ def is_counter_type(t):
 cql_type_to_apache_class = dict([(c, t.cassname) for (c, t) in _cqltypes.items()])
 apache_class_to_cql_type = dict([(n, t.typename) for (n, t) in _casstypes.items()])
 
-cql_types = sorted(_cqltypes.keys())
+cql_types = sorted([t for t in _cqltypes.keys() if not t.startswith("'")])
 
 def cql_typename(casstypename):
     """
