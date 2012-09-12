@@ -716,8 +716,7 @@ class NativeConnection(Connection):
         self.conn_ready = False
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((self.host, self.port))
-        #self.socketf = s.makefile(bufsize=0)
-        self.socketf = debugsock(s)
+        self.socketf = s.makefile(bufsize=0)
         self.sockfd = s
         self.open_socket = True
         supported = self.wait_for_request(OptionsMessage())
