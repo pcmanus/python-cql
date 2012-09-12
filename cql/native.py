@@ -620,9 +620,6 @@ class NativeCursor(Cursor):
         em = ExecuteMessage(queryid=prepared_query.itemid, queryparams=params)
         return self._connection.wait_for_request(em)
 
-    def executemany(self, querylist, argslist):
-        pass
-
     def get_column_metadata(self, column_id):
         return self.decoder.decode_metadata_and_type_native(column_id)
 
