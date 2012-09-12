@@ -152,21 +152,28 @@ class ErrorMessage(_MessageType):
 
 class ErrorMessageSubclass(_register_msg_type):
     def __init__(cls, name, bases, dct):
-        if not name.startswith('_'):
+        if cls.errorcode is not None:
             error_classes[cls.errorcode] = cls
 
-class _ErrorMessageSub(ErrorMessage):
+class ErrorMessageSub(ErrorMessage):
     __metaclass__ = ErrorMessageSubclass
+    errorcode = None
 
-class ServerErrorMessage(_ErrorMessageSub):
+class RequestExecutionException(ErrorMessageSub):
+    pass
+
+class RequestValidationException(ErrorMessageSub):
+    pass
+
+class ServerError(ErrorMessageSub):
     summary = 'Server error'
     errorcode = 0x0000
 
-class ProtocolErrorMessage(_ErrorMessageSub):
+class ProtocolException(ErrorMessageSub):
     summary = 'Protocol error'
     errorcode = 0x000A
 
-class UnavailableExceptionErrorMessage(_ErrorMessageSub):
+class UnavailableExceptionErrorMessage(RequestExecutionException):
     summary = 'Unavailable exception'
     errorcode = 0x1000
 
@@ -178,19 +185,22 @@ class UnavailableExceptionErrorMessage(_ErrorMessageSub):
             'alive': read_int(f),
         }
 
-class OverloadedErrorMessage(_ErrorMessageSub):
+class OverloadedErrorMessage(RequestExecutionException):
     summary = 'Coordinator node overloaded'
     errorcode = 0x1001
 
-class IsBootstrappingErrorMessage(_ErrorMessageSub):
+class IsBootstrappingErrorMessage(RequestExecutionException):
     summary = 'Coordinator node is bootstrapping'
     errorcode = 0x1002
 
-class TruncateErrorMessage(_ErrorMessageSub):
+class TruncateError(RequestExecutionException):
     summary = 'Error during truncate'
     errorcode = 0x1003
 
-class WriteTimeoutErrorMessage(_ErrorMessageSub):
+class RequestTimeoutException(RequestExecutionException):
+    pass
+
+class WriteTimeoutErrorMessage(RequestTimeoutException):
     summary = 'Timeout during write request'
     errorcode = 0x1100
 
@@ -202,7 +212,7 @@ class WriteTimeoutErrorMessage(_ErrorMessageSub):
             'blockfor': read_int(f),
         }
 
-class ReadTimeoutErrorMessage(_ErrorMessageSub):
+class ReadTimeoutErrorMessage(RequestTimeoutException):
     summary = 'Timeout during read request'
     errorcode = 0x1200
 
@@ -215,23 +225,23 @@ class ReadTimeoutErrorMessage(_ErrorMessageSub):
             'data_present': bool(read_byte(f)),
         }
 
-class SyntaxErrorErrorMessage(_ErrorMessageSub):
+class SyntaxException(RequestValidationException):
     summary = 'Syntax error in CQL query'
     errorcode = 0x2000
 
-class UnauthorizedErrorMessage(_ErrorMessageSub):
+class UnauthorizedErrorMessage(RequestValidationException):
     summary = 'Unauthorized'
     errorcode = 0x2100
 
-class InvalidQueryErrorMessage(_ErrorMessageSub):
+class InvalidRequestException(RequestValidationException):
     summary = 'Invalid query'
     errorcode = 0x2200
 
-class BadConfigErrorMessage(_ErrorMessageSub):
+class ConfigurationException(RequestValidationException):
     summary = 'Query invalid because of configuration issue'
     errorcode = 0x2300
 
-class AlreadyExistsErrorMessage(_ErrorMessageSub):
+class AlreadyExistsException(ConfigurationException):
     summary = 'Item already exists'
     errorcode = 0x2400
 
@@ -625,31 +635,15 @@ class NativeCursor(Cursor):
     def handle_cql_execution_errors(self, response):
         if not isinstance(response, ErrorMessage):
             return
-        try:
-            codemsg = response.error_codes[response.code]
-        except KeyError:
-            codemsg = '(Unknown error code %04x)' % response.code
-        if codemsg == 'Schema disagreement exception':
-            eclass = cql.IntegrityError
-        elif codemsg == 'Authentication error':
+        if isinstance(response, UnauthorizedErrorMessage):
             eclass = cql.NotAuthenticated
-        elif codemsg == ('Unavailable exception', 'Timeout exception'):
+        elif isinstance(response, RequestExecutionException):
             eclass = cql.OperationalError
-        elif codemsg == 'Request exception':
+        elif isinstance(response, RequestValidationException):
             eclass = cql.ProgrammingError
         else:
             eclass = cql.InternalError
-        raise eclass('%s: %s' % (codemsg, response.msg))
-
-    error_codes = {
-        0x0000: 'Server error',
-        0x0001: 'Protocol error',
-        0x0002: 'Authentication error',
-        0x0100: 'Unavailable exception',
-        0x0101: 'Timeout exception',
-        0x0102: 'Schema disagreement exception',
-        0x0200: 'Request exception',
-    }
+        raise eclass(response.summarymsg())
 
     def process_execution_results(self, response, decoder=None):
         self.handle_cql_execution_errors(response)
