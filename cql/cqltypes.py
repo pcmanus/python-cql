@@ -624,7 +624,7 @@ class ColumnToCollectionType(_ParameterizedType):
     information.
     """
     typename = "'org.apache.cassandra.db.marshal.ColumnToCollectionType'"
-    num_subtypes = 1
+    num_subtypes = 'UNKNOWN'
 
 class ReversedType(_ParameterizedType):
     typename = "'org.apache.cassandra.db.marshal.ReversedType'"
