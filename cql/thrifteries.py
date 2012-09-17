@@ -134,9 +134,6 @@ class ThriftConnection(Connection):
         if self.cql_version:
             self.set_cql_version(self.cql_version)
 
-        if self.keyspace:
-            self.set_initial_keyspace(self.keyspace)
-
     def set_cql_version(self, cql_version):
         self.client.set_cql_version(cql_version)
         try:

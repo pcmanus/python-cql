@@ -761,8 +761,6 @@ class NativeConnection(Connection):
                 raise cql.InternalError("Unexpected response %r during connection setup"
                                         % startup_response)
 
-        if self.keyspace:
-            self.set_initial_keyspace(self.keyspace)
 
     def set_initial_keyspace(self, keyspace):
         c = self.cursor()

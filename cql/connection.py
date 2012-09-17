@@ -46,6 +46,9 @@ class Connection(object):
         self.establish_connection()
         self.open_socket = True
 
+        if self.keyspace:
+            self.set_initial_keyspace(self.keyspace)
+
     def __str__(self):
         return ("%s(host=%r, port=%r, keyspace=%r, %s)"
                 % (self.__class__.__name__, self.host, self.port, self.keyspace,
